@@ -24,6 +24,8 @@
       notebook
       skl2onnx
       onnxruntime
+      tensorflow
+      tensoflow-hub
     '';
     uv.enable = true;
   };
