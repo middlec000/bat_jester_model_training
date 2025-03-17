@@ -1,5 +1,7 @@
-data/
 __pycache__/
 .devenv/
 .vscode/
 trained_models/
+no_ground_hits/
+with_ground_hits/
+video_raw/
