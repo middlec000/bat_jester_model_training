@@ -23,6 +23,7 @@
       pip
       notebook
       skl2onnx
+      onnxruntime
     '';
     uv.enable = true;
   };
