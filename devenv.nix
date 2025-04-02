@@ -32,9 +32,4 @@
     };
     uv.enable = true;
   };
-
-  enterShell = ''
-    echo "Entering shell"
-    code .
-  '';
 }
