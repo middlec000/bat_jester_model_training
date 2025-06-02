@@ -1,7 +1,7 @@
 {
   inputs =
     let
-      version = "1.4.1";
+      version = "1.6.1";
 system = "x86_64-linux";
 devenv_root = "/home/colin/code/bat_jester_model_training";
 devenv_dotfile = ./.devenv;
@@ -24,7 +24,7 @@ devenv_direnvrc_latest_version = 1;
 
       outputs = { nixpkgs, ... }@inputs:
         let
-          version = "1.4.1";
+          version = "1.6.1";
 system = "x86_64-linux";
 devenv_root = "/home/colin/code/bat_jester_model_training";
 devenv_dotfile = ./.devenv;
@@ -80,8 +80,11 @@ devenv_direnvrc_latest_version = 1;
               then devenvdefaultpath
               else throw (devenvdefaultpath + " file does not exist for input ${name}.");
           project = pkgs.lib.evalModules {
-            specialArgs = inputs // { inherit inputs pkgs; };
+            specialArgs = inputs // { inherit inputs; };
             modules = [
+              ({ config, ... }: {
+                _module.args.pkgs = pkgs.appendOverlays (config.overlays or [ ]);
+              })
               (inputs.devenv.modules + /top-level.nix)
               {
                 devenv.cliVersion = version;
@@ -105,9 +108,10 @@ devenv_direnvrc_latest_version = 1;
                 };
               })
             ] ++ (map importModule (devenv.imports or [ ])) ++ [
-              ./devenv.nix
+              (if builtins.pathExists ./devenv.nix then ./devenv.nix else { })
               (devenv.devenv or { })
               (if builtins.pathExists ./devenv.local.nix then ./devenv.local.nix else { })
+              (if builtins.pathExists (devenv_dotfile + "/cli-options.nix") then import (devenv_dotfile + "/cli-options.nix") else { })
             ];
           };
           config = project.config;
@@ -142,16 +146,18 @@ devenv_direnvrc_latest_version = 1;
                   } else { }
               )
               options;
+
+          systems = [ "x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin" ];
         in
         {
-          packages."${system}" = {
+          devShell = lib.genAttrs systems (system: config.shell);
+          packages = lib.genAttrs systems (system: {
             optionsJSON = options.optionsJSON;
             # deprecated
             inherit (config) info procfileScript procfileEnv procfile;
             ci = config.ciDerivation;
-          };
+          });
           devenv = config;
           build = build project.options project.config;
-          devShell."${system}" = config.shell;
         };
       }
