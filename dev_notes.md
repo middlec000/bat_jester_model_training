@@ -1,8 +1,4 @@
-* Having trouble with NumPy dependencies in NixOS -> try to move forward without using NumPy.
-    * Plotly Graph Objects do not depend on Numpy (but most other graphing packages do - including Plotly Express)
-
-
-## Model Deployment in Flutter App
+# Model Deployment in Flutter App
 ## Scikit-Learn Models
 Deploying a scikit-learn SVM model within a Flutter app involves a few key steps, primarily because scikit-learn is a Python library, and Flutter uses Dart. Here's a breakdown of the process:
 
