@@ -1,0 +1,31 @@
+[project]
+name = "bat_jester_model_training"
+version = "0.1.0"
+requires-python = ">=3.9,<3.10"
+
+dependencies = [
+    "ruff",
+    "numpy",
+    "librosa",
+    "pandas",
+    "matplotlib",
+    "ipykernel",
+    "jupyterlab",
+    "pip",
+    "notebook",
+    "skl2onnx",
+    "onnxruntime",
+    "tensorflow",
+    "tensorflow_hub",
+    "pywavelets"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "black"
+]
+
+[tool.ruff]
+line-length = 88
+target-version = "py39"

@@ -23,4 +23,27 @@ The data that is used for model training must be converted to appropriate data t
 
 ## Future Development
 - Extract additional features from the input data.
+    - Refine Wavelet approach.
 - Add speech recognition to "Start" and "Stop" the juggle counter.
+
+## Contribute
+Would love to collaborate on this project!
+- Data Access
+    - I will need to send you the data. Please see [this discussion](https://github.com/middlec000/bat_jester_model_training/discussions/3).
+- Setting Up Your Environment
+    - [Clone](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) the GitHub repo.
+    - Use `uv` to manage Python and Python packages.
+        - Install `uv` on your system - see [here](https://docs.astral.sh/uv/getting-started/installation/).
+        - Ensure `uv` is installed:
+        ```bash
+        uv --version
+        ```
+        - Use `uv` to install python and the packages for this project:
+        ```bash
+        uv sync
+        ```
+        - To add a new package:
+        ```bash
+        uv add <package_name>
+        ```
+    - Disregard the `flake.nix` and `flake.lock` files unless you are using `nix` for package management on your machine.
