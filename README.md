@@ -22,9 +22,11 @@ The data that is used for model training must be converted to appropriate data t
 - Models are saved in either ONNX or TF Lite format.
 
 ## Future Development
-- Extract additional features from the input data.
-    - Refine Wavelet approach.
-- Add speech recognition to "Start" and "Stop" the juggle counter.
+- [ ] Check that labels match up with data
+- [ ] Extract additional features from the input data.
+    - [ ] Refine Wavelet approach.
+- [ ] Add speech recognition to "Start" and "Stop" the juggle counter.
+- [ ] Investigate switching to using video as in the examples above.
 
 ## Contribute
 Would love to collaborate on this project!
