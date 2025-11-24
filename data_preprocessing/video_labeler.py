@@ -3,11 +3,9 @@ import numpy as np
 from ultralytics import YOLO
 import json
 from collections import deque
-from pathlib import Path
-from time import time
 
 
-class SoccerJuggleLabeler:
+class SoccerJuggleVideoLabeler:
     def __init__(self, video_path, model_path="yolov8n.pt", confidence_threshold=0.25):
         """
         Initialize the juggle labeler
@@ -292,34 +290,3 @@ class SoccerJuggleLabeler:
 
         print(f"Exported labels to {output_json}")
         return labels
-
-
-# Example usage
-if __name__ == "__main__":
-    file_path = "data/Photos-1-001(2)/PXL_20251116_173019988.TS~3.mp4"
-    file_path = Path(file_path)
-
-    start_time = time()
-    print(f"Labeling video: {file_path}")
-
-    # Initialize labeler
-    labeler = SoccerJuggleLabeler(video_path=file_path, confidence_threshold=0.001)
-
-    # Process video (set visualize=True for visual feedback)
-    labeler.process_video(
-        visualize=False,
-        output_path=file_path.with_name(file_path.stem + "_annotated.mp4"),
-    )
-
-    # # Create video with juggle annotations
-    # labeler.visualize_with_juggles("juggles_annotated.mp4")
-
-    # Export labels
-    labels = labeler.export_labels(file_path.with_name(file_path.stem + "_labels.json"))
-
-    end_time = time()
-
-    # Print summary
-    print(f"Labeling completed in {end_time - start_time:.2f} seconds")
-    print("\nSummary:")
-    print(f"Total juggles detected: {labels['total_juggles']}")
