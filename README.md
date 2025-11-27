@@ -41,3 +41,10 @@ Would love to collaborate on this project!
     - [Email me](mailto:colindmiddleton@gmail.com)
 - Communication Channel
     - [Google Chat Space](https://mail.google.com/chat/u/0/#chat/space/AAQAvpsTG20)
+- Development git branching pattern
+    - Branch from main with branch name describing branch purpose
+    ```bash
+    git switch main
+    git branch clip_videos_on_voice_commands
+    ```
+    - When the work is ready, open a pull request in GitHub with target branch=`main`
