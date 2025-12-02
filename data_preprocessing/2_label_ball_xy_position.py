@@ -42,27 +42,47 @@ def label_xy_positions():
         annotated_output_path = OUTPUT_PATH / (file_path.stem + "_annotated.mp4")
         labeler.process_video(visualize=False, output_path=str(annotated_output_path))
 
-        # Convert ball positions to DataFrame
+        # Get total number of frames in the video
+        import cv2
+
+        cap = cv2.VideoCapture(str(file_path))
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        cap.release()
+
+        # Create a complete DataFrame with all frames
         # ball_positions format: [(frame_num, x, y, confidence), ...]
+        all_frames = pd.DataFrame({"Frame": range(total_frames)})
+
         if labeler.ball_positions:
-            df = pd.DataFrame(
+            detected_df = pd.DataFrame(
                 labeler.ball_positions, columns=["Frame", "x", "y", "confidence"]
             )
-
-            # Save as parquet (without confidence column as per spec)
-            parquet_output_path = OUTPUT_PATH / (
-                file_path.stem + "_xy_frame_labels.parquet"
+            # Merge to get all frames, with nulls where ball wasn't detected
+            df = all_frames.merge(
+                detected_df[["Frame", "x", "y"]], on="Frame", how="left"
             )
-            df[["Frame", "x", "y"]].to_parquet(parquet_output_path, index=False)
-
-            print("\nSummary:")
-            print(f"  - Frames processed: {df['Frame'].max() + 1}")
-            print(f"  - Frames with ball detected: {len(df)}")
-            print(f"  - Detection rate: {len(df) / (df['Frame'].max() + 1) * 100:.1f}%")
-            print(f"  - Annotated video saved to: {annotated_output_path}")
-            print(f"  - Labels saved to: {parquet_output_path}")
         else:
-            print(f"Warning: No ball positions detected in {file_path.name}")
+            # No detections - all x, y values will be null
+            df = all_frames
+            df["x"] = None
+            df["y"] = None
+
+        # Save as parquet
+        parquet_output_path = OUTPUT_PATH / (
+            file_path.stem + "_xy_frame_labels.parquet"
+        )
+        df[["Frame", "x", "y"]].to_parquet(parquet_output_path, index=False)
+
+        # Calculate detection statistics
+        detected_count = df[["x", "y"]].notna().all(axis=1).sum()
+        total_count = len(df)
+
+        print("\nSummary:")
+        print(f"  - Total frames: {total_count}")
+        print(f"  - Frames with ball detected: {detected_count}")
+        print(f"  - Detection rate: {detected_count / total_count * 100:.1f}%")
+        print(f"  - Annotated video saved to: {annotated_output_path}")
+        print(f"  - Labels saved to: {parquet_output_path}")
 
     end_time = time()
 

@@ -18,6 +18,7 @@
         - `.mp4` video files with xy position overlaid over every frame
     - Save to `/data/2_ball_xy_positions`
         - `.parquet` of xy labels: Frame, x, y
+        - Frames where xy position could not be detected have NULL for x and y
 - [ ] (Step 3) Remove video where no x, y position could be found and save remaining as separate video segments (with separate x, y label files)
     - Load from `/data/1_clipped_videos`
         - Clipped `.mp4` video files
