@@ -28,7 +28,8 @@
         - `.mp4` video files where every frame has an xy label
         - `.mp4` video files with xy position overlaid over every frame
         - `.parquet` of xy labels: Frame, x, y
-- [x] (Step 4) Label ball juggle timestamps
+- [ ] (Step 4) Label ball juggle timestamps
+    - Not done but in [deprecated_run_data_labeling_steps.py](../data_preprocessing/deprecated_run_data_labeling_steps.py)
     - Calculate vertical ball velocity from x, y positions
     - Add juggle timestamp label when ball switches from downward velocity to upward
     - Load from `/data/3_completely_xy_labeled_clips`
@@ -37,7 +38,8 @@
     - Save to `/data/4_juggle_labels`
         - `.mp4` video files where every frame has an xy label
         - `.json` with timestamps and length of clip
-- [x] (Step 5) Separate the audio from the video
+- [ ] (Step 5) Separate the audio from the video
+    - Not done but in [deprecated_run_data_labeling_steps.py](../data_preprocessing/deprecated_run_data_labeling_steps.py)
     - Load from `/data/4_juggle_labels`
         - `.mp4` video files where every frame has an xy label
     - Save to `/dev/5_audio/`
