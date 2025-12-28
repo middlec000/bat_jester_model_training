@@ -8,6 +8,7 @@
 # Data Preprocessing
 - [ ] (Step 1) Clip beginning and end of video so only video where juggling is happening remains
     - Use a speech model to identify where I say “start” and “stop” and trim before and after
+    - Skip over (do not save) videos where either "start" or "stop" was not detected
     - Load from `data/0_raw_videos`
         - Original `.mp4` video files
     - Save to `/data/1_clipped_videos`

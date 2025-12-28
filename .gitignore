@@ -7,4 +7,5 @@ no_ground_hits/
 with_ground_hits/
 video_raw/
 data/
-"[deprecated]"**/
+data
+"[deprecated]**
