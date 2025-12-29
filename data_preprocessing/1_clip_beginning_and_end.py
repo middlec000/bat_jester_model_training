@@ -12,10 +12,12 @@ For each MP4 video in input_dir:
 import whisper
 import os
 from pathlib import Path
-from moviepy.video.io.VideoFileClip import VideoFileClip
+from moviepy import VideoFileClip
+import tempfile
+import subprocess
 
 
-def find_word_timestamp(segments, target_word, min_probability=0.0):
+def find_word_timestamp(segments, target_word, min_probability=0.0, min_timestamp=0.0):
     """
     Find the timestamp of a target word in Whisper segments.
 
@@ -23,6 +25,7 @@ def find_word_timestamp(segments, target_word, min_probability=0.0):
         segments: List of segment dictionaries from Whisper
         target_word: Word to search for (case-insensitive)
         min_probability: Minimum probability threshold for word detection (0.0 to 1.0)
+        min_timestamp: Minimum timestamp threshold (ignore words before this time)
 
     Returns:
         Tuple of (timestamp, probability) when the word starts, or (None, None) if not found
@@ -39,11 +42,16 @@ def find_word_timestamp(segments, target_word, min_probability=0.0):
                 word = word_info["word"].strip().lower()
                 word_clean = word.strip(".,!?;:")
                 probability = word_info.get("probability", 1.0)
+                timestamp = word_info["start"]
 
-                # Check if this word matches and meets the probability threshold
-                if target_word_lower == word_clean and probability >= min_probability:
+                # Check if this word matches and meets the probability and timestamp thresholds
+                if (
+                    target_word_lower == word_clean
+                    and probability >= min_probability
+                    and timestamp >= min_timestamp
+                ):
                     if probability > best_probability:
-                        best_match = word_info["start"]
+                        best_match = timestamp
                         best_probability = probability
         else:
             # Fallback to segment-level text search (no probability available)
@@ -59,7 +67,7 @@ def find_word_timestamp(segments, target_word, min_probability=0.0):
     return None, None
 
 
-def process_video(video_path, output_dir, model, min_probability=0.0):
+def process_video(video_path, output_dir, model, min_probability=0.0, volume_boost=1.0):
     """
     Process a single video: detect start/stop words and trim.
 
@@ -68,6 +76,7 @@ def process_video(video_path, output_dir, model, min_probability=0.0):
         output_dir: Directory to save trimmed video
         model: Loaded Whisper model
         min_probability: Minimum probability threshold for word detection (0.0 to 1.0)
+        volume_boost: Audio volume multiplier (e.g., 2.0 = double volume, 5.0 = 5x volume)
 
     Returns:
         True if video was successfully processed, False otherwise
@@ -75,9 +84,43 @@ def process_video(video_path, output_dir, model, min_probability=0.0):
     video_name = os.path.basename(video_path)
     print(f"\nProcessing: {video_name}")
 
+    # If volume boost is needed, create a temporary file with amplified audio
+    temp_file = None
+    transcribe_path = video_path
+
+    if volume_boost > 1.0:
+        print(f"  Boosting audio volume by {volume_boost}x...")
+        temp_file = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
+        temp_path = temp_file.name
+        temp_file.close()
+
+        # Use ffmpeg to amplify audio while keeping video unchanged
+        # volume filter multiplies the audio amplitude
+        cmd = [
+            "ffmpeg",
+            "-i",
+            str(video_path),
+            "-af",
+            f"volume={volume_boost}",
+            "-c:v",
+            "copy",  # Copy video stream without re-encoding
+            "-y",  # Overwrite output file
+            temp_path,
+        ]
+
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            if result.returncode != 0:
+                print("  Warning: Failed to boost audio. Using original video.")
+                print(f"  Error: {result.stderr}")
+            else:
+                transcribe_path = temp_path
+        except Exception as e:
+            print(f"  Warning: Failed to boost audio: {e}. Using original video.")
+
     # Transcribe audio with Whisper (enable word-level timestamps)
     print("  Transcribing audio...")
-    result = model.transcribe(str(video_path), word_timestamps=True, fp16=False)
+    result = model.transcribe(str(transcribe_path), word_timestamps=True, fp16=False)
     segments = result["segments"]
 
     # Debug: Show full transcript
@@ -100,15 +143,18 @@ def process_video(video_path, output_dir, model, min_probability=0.0):
     # End debug block
 
     # Find "start" and "stop" timestamps
-    start_time, start_prob = find_word_timestamp(segments, "start", min_probability)
+    # Ignore "start" commands within 0.25 seconds of video beginning
+    start_time, start_prob = find_word_timestamp(
+        segments, "start", min_probability, min_timestamp=0.25
+    )
     stop_time, stop_prob = find_word_timestamp(segments, "stop", min_probability)
 
     if start_time is None or stop_time is None:
-        print(f"  Skipping: Could not detect both 'start' and 'stop'")
+        print("  Skipping: Could not detect both 'start' and 'stop'")
         print(f"    start: {start_time} (prob: {start_prob if start_prob else 'N/A'})")
         print(f"    stop: {stop_time} (prob: {stop_prob if stop_prob else 'N/A'})")
         print(f"    (min_probability threshold: {min_probability})")
-        print(f"  Tip: Check if you actually said both words clearly in the video.")
+        print("  Tip: Check if you actually said both words clearly in the video.")
         return False
 
     print(f"  Detected 'start' at {start_time:.2f}s (prob: {start_prob:.3f})")
@@ -120,29 +166,52 @@ def process_video(video_path, output_dir, model, min_probability=0.0):
 
     print(f"  Trimming video from {trim_start:.2f}s to {trim_end:.2f}s")
 
-    # Load and trim video
+    # Get video duration to validate trim range
     video = VideoFileClip(str(video_path))
+    video_duration = video.duration
+    video.close()
 
     # Ensure trim_end doesn't exceed video duration
-    trim_end = min(trim_end, video.duration)
+    trim_end = min(trim_end, video_duration)
 
     if trim_start >= trim_end:
         print(f"  Skipping: Invalid trim range ({trim_start:.2f}s to {trim_end:.2f}s)")
-        video.close()
         return False
 
-    trimmed_video = video.subclip(trim_start, trim_end)
-
-    # Save trimmed video
+    # Use ffmpeg with stream copy for fast clipping (no re-encoding)
     output_path = os.path.join(output_dir, video_name)
     print(f"  Saving to: {output_path}")
-    trimmed_video.write_videofile(
-        output_path, codec="libx264", audio_codec="aac", verbose=False, logger=None
-    )
 
-    # Clean up
-    trimmed_video.close()
-    video.close()
+    duration = trim_end - trim_start
+    cmd = [
+        "ffmpeg",
+        "-ss",
+        str(trim_start),  # Start time
+        "-i",
+        str(video_path),  # Input file
+        "-t",
+        str(duration),  # Duration
+        "-c",
+        "copy",  # Copy streams without re-encoding
+        "-y",  # Overwrite output
+        output_path,
+    ]
+
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            print(f"  Error clipping video: {result.stderr}")
+            return False
+    except Exception as e:
+        print(f"  Error running ffmpeg: {e}")
+        return False
+
+    # Clean up temporary boosted audio file
+    if temp_file is not None:
+        try:
+            os.unlink(temp_file.name)
+        except Exception:
+            pass
 
     print(f"  ✓ Successfully processed {video_name}")
     return True
@@ -163,22 +232,28 @@ def main():
     # Lower values (e.g., 0.3-0.5) will catch more words but may include false positives
     MIN_PROBABILITY = 0.0  # Adjust this value as needed
 
+    # AUDIO VOLUME BOOST: Multiply audio volume to help Whisper detect quiet speech
+    # Range: 1.0 (no change) to 10.0 (very loud)
+    # Recommended: Start with 2.0-5.0 for quiet videos
+    VOLUME_BOOST = 5.0  # Adjust this value as needed
+
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    print(f"Configuration:")
+    print("Configuration:")
     print(f"  Model: {model_name}")
     print(f"  Min probability threshold: {MIN_PROBABILITY}")
+    print(f"  Audio volume boost: {VOLUME_BOOST}x")
     print(f"  Input directory: {input_dir}")
     print(f"  Output directory: {output_dir}")
 
     # Load Whisper model
-    print(f"\nLoading Whisper model...")
+    print("\nLoading Whisper model...")
     model = whisper.load_model(model_name, device="cpu")
 
     # Find all MP4 videos
     video_files = list(input_dir.glob("*.mp4")) + list(input_dir.glob("*.MP4"))
-    video_files = video_files[1:2]  # To DO: remove this line to process all videos
-    video_files = [input_dir / "PXL_20251210_230116248.mp4"]
+    # video_files = video_files[1:2]  # To DO: remove this line to process all videos
+    # video_files = [input_dir / "PXL_20251215_232210350.mp4"]
 
     if not video_files:
         print(f"No MP4 files found in {input_dir}")
@@ -192,7 +267,9 @@ def main():
 
     for video_path in video_files:
         try:
-            if process_video(video_path, output_dir, model, MIN_PROBABILITY):
+            if process_video(
+                video_path, output_dir, model, MIN_PROBABILITY, VOLUME_BOOST
+            ):
                 successful += 1
             else:
                 skipped += 1
