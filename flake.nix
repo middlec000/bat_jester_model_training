@@ -26,6 +26,7 @@
             pkgs.uv
             pkgs.cacert
             pkgs.ffmpeg
+            pkgs.nodejs_22
             # C++ standard library (required by numpy)
             pkgs.stdenv.cc.cc.lib
             # OpenCV headless dependencies (no Qt/GUI)
