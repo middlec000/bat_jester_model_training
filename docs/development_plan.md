@@ -13,6 +13,8 @@
         - Original `.mp4` video files
     - Save to `/data/1_clipped_videos`
         - Clipped `.mp4` video files
+    - Save to `/data/0_to_1_logs`
+        - Processing logs
 - [x] (Step 2) Label x, y position of ball in each video frame using image model
     - Load from `/data/1_clipped_videos`
         - Clipped `.mp4` video files
@@ -20,7 +22,7 @@
     - Save to `/data/2_ball_xy_positions`
         - `.parquet` of xy labels: Frame, x, y
         - Frames where xy position could not be detected have NULL for x and y
-- [ ] (Step 3) Remove video where no x, y position could be found and save remaining as separate video segments (with separate x, y label files)
+- [ ] (Step 3) Remove video segments where no x, y position could be found and save remaining as separate video segments (with separate x, y label files)
     - Load from `/data/1_clipped_videos`
         - Clipped `.mp4` video files
     - Load from `/data/2_ball_xy_positions`
