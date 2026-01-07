@@ -51,54 +51,35 @@ def get_video_logger(video_name: str, output_dir: Path) -> logging.Logger:
     return _VIDEO_LOGGERS[video_name]
 
 
-def find_word_timestamp(segments, target_word, min_probability=0.0, min_timestamp=0.0):
-    """
-    Find the timestamp of a target word in Whisper segments.
-
-    Args:
-        segments: List of segment dictionaries from Whisper
-        target_word: Word to search for (case-insensitive)
-        min_probability: Minimum probability threshold for word detection (0.0 to 1.0)
-        min_timestamp: Minimum timestamp threshold (ignore words before this time)
-
-    Returns:
-        Tuple of (timestamp, probability) when the word starts, or (None, None) if not found
-    """
+def find_all_word_timestamps(
+    segments, target_word, min_probability=0.0, min_timestamp=0.0
+) -> list[tuple[float, float]]:
+    """Return a sorted list of (timestamp, probability) for all occurrences of target_word."""
     target_word_lower = target_word.lower()
-    best_match = None
-    best_probability = 0.0
+    matches: list[tuple[float, float]] = []
 
     for segment in segments:
-        # Check if segment has word-level timestamps
         if "words" in segment:
             for word_info in segment["words"]:
-                # Strip punctuation and whitespace for comparison
                 word = word_info["word"].strip().lower()
                 word_clean = word.strip(".,!?;:")
                 probability = word_info.get("probability", 1.0)
                 timestamp = word_info["start"]
 
-                # Check if this word matches and meets the probability and timestamp thresholds
                 if (
                     target_word_lower == word_clean
                     and probability >= min_probability
                     and timestamp >= min_timestamp
                 ):
-                    if probability > best_probability:
-                        best_match = timestamp
-                        best_probability = probability
+                    matches.append((timestamp, probability))
         else:
-            # Fallback to segment-level text search (no probability available)
-            text = segment["text"].lower()
+            # fallback to segment-level match
+            text = segment.get("text", "").lower()
             if target_word_lower in text:
-                return segment[
-                    "start"
-                ], 1.0  # Assume high probability for segment-level match
+                matches.append((segment["start"], 1.0))
 
-    if best_match is not None:
-        return best_match, best_probability
-
-    return None, None
+    matches.sort(key=lambda x: x[0])
+    return matches
 
 
 def process_video(
@@ -194,29 +175,64 @@ def process_video(
 
     # Find "start" and "stop" timestamps
     # Ignore "start" commands within 0.25 seconds of video beginning
-    start_time, start_prob = find_word_timestamp(
+    starts = find_all_word_timestamps(
         segments, "start", min_probability, min_timestamp=0.25
     )
-    stop_time, stop_prob = find_word_timestamp(segments, "stop", min_probability)
+    stops = find_all_word_timestamps(
+        segments, "stop", min_probability, min_timestamp=0.25
+    )
 
-    if start_time is None or stop_time is None:
-        video_logger.warning("Could not detect both 'start' and 'stop'")
-        video_logger.warning(
-            "start: %s (prob: %s)",
-            start_time,
-            start_prob if start_prob else "N/A",
-        )
-        video_logger.warning(
-            "stop: %s (prob: %s)",
-            stop_time,
-            stop_prob if stop_prob else "N/A",
-        )
-        video_logger.info("min_probability threshold: %s", min_probability)
+    if len(starts) == 0 and len(stops) == 0:
+        video_logger.warning("Could not detect 'start' or 'stop'")
         video_logger.info("Tip: Speak both words clearly in the video.")
         processing_logger.warning(
             "Skipping %s because words could not be detected", video_name
         )
         return False
+    # If no explicit 'start' was found, but exactly two 'stop's are detected and both meet the
+    # probability threshold, treat the first 'stop' as the 'start'. This helps when users
+    # accidentally say 'stop' twice but mean the first to mark the start.
+    elif len(starts) == 0:
+        if len(stops) == 2:
+            start_time, start_prob = stops[0]
+            stop_time, stop_prob = stops[1]
+            video_logger.info(
+                "No explicit 'start' found; treating first 'stop' at %0.2fs as 'start' (prob: %.3f)",
+                start_time,
+                start_prob,
+            )
+            video_logger.info("Interpreting first 'stop' as 'start' for %s", video_name)
+        else:
+            video_logger.warning("Could not detect 'start'")
+            processing_logger.warning(
+                "Skipping %s because 'start' could not be detected", video_name
+            )
+            return False
+    # If no explicit 'stop' found, but exactly two 'start's are detected and both meet the
+    # probability threshold, treat the second 'start' as the 'stop'. This helps when users
+    # accidentally say 'start' twice but mean the second one to mark the end.
+    elif len(stops) == 0:
+        if len(starts) == 2:
+            start_time, start_prob = starts[0]
+            stop_time, stop_prob = starts[1]
+            video_logger.info(
+                "No explicit 'stop' found; treating second 'start' at %0.2fs as 'stop' (prob: %.3f)",
+                stop_time,
+                stop_prob,
+            )
+            video_logger.info(
+                "Interpreting second 'start' as 'stop' for %s", video_name
+            )
+        else:
+            video_logger.warning("Could not detect 'stop'")
+            processing_logger.warning(
+                "Skipping %s because 'stop' could not be detected", video_name
+            )
+            return False
+    else:
+        # Both 'start' and 'stop' detected; use the highest probability occurrences
+        start_time, start_prob = max(starts, key=lambda x: x[1])
+        stop_time, stop_prob = max(stops, key=lambda x: x[1])
 
     video_logger.info("Detected 'start' at %0.2fs (prob: %.3f)", start_time, start_prob)
     video_logger.info("Detected 'stop' at %0.2fs (prob: %.3f)", stop_time, stop_prob)
@@ -325,7 +341,7 @@ def main():
     # video_files = list(input_dir.glob("*.mp4")) + list(input_dir.glob("*.MP4"))
     video_files = [
         # input_dir / "PXL_20260107_000456513.mp4",
-        input_dir / "PXL_20260107_000551673.mp4",
+        # input_dir / "PXL_20260107_000551673.mp4",
         # input_dir / "PXL_20260107_000725053.mp4",
         input_dir / "PXL_20260107_000801717.mp4",
         # input_dir / "PXL_20260107_000928516.mp4",
