@@ -82,6 +82,67 @@ def find_all_word_timestamps(
     return matches
 
 
+def preprocess_audio(
+    video_path: str,
+    output_path: str,
+    volume_boost: float = 1.0,
+    denoise: bool = True,
+    normalize: bool = True,
+) -> bool:
+    """
+    Preprocess audio with multiple enhancement filters.
+
+    Args:
+        video_path: Input video file
+        output_path: Output video file with enhanced audio
+        volume_boost: Volume multiplier
+        denoise: Apply noise reduction
+        normalize: Apply audio normalization
+
+    Returns:
+        True if successful, False otherwise
+    """
+    filters = []
+
+    # High-pass filter to remove low-frequency noise (rumble)
+    filters.append("highpass=f=80")
+
+    # Noise reduction (FFmpeg's afftdn filter)
+    if denoise:
+        filters.append("afftdn=nf=-25")
+
+    # Dynamic range compression to make quiet speech louder
+    filters.append("acompressor=threshold=0.089:ratio=9:attack=200:release=1000")
+
+    # Volume boost
+    if volume_boost > 1.0:
+        filters.append(f"volume={volume_boost}")
+
+    # Normalization to ensure consistent levels
+    if normalize:
+        filters.append("loudnorm")
+
+    audio_filter = ",".join(filters)
+
+    cmd = [
+        "ffmpeg",
+        "-i",
+        str(video_path),
+        "-af",
+        audio_filter,
+        "-c:v",
+        "copy",  # Copy video without re-encoding
+        "-y",
+        output_path,
+    ]
+
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        return result.returncode == 0
+    except Exception:
+        return False
+
+
 def process_video(
     video_path,
     output_dir,
@@ -90,6 +151,7 @@ def process_video(
     logging_dir: Path,
     min_probability=0.0,
     volume_boost=1.0,
+    enable_preprocessing=True,  # New parameter
 ) -> bool:
     """
     Process a single video: detect start/stop words and trim.
@@ -111,44 +173,26 @@ def process_video(
     processing_logger.info("Processing %s", video_name)
     video_logger.info("Processing %s", video_name)
 
-    # If volume boost is needed, create a temporary file with amplified audio
     temp_file = None
     transcribe_path = video_path
 
-    if volume_boost > 1.0:
-        video_logger.info("Boosting audio volume by %sx", volume_boost)
+    if enable_preprocessing:
+        video_logger.info("Applying audio preprocessing (denoise, normalize, compress)")
         temp_file = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
         temp_path = temp_file.name
         temp_file.close()
 
-        # Use ffmpeg to amplify audio while keeping video unchanged
-        # volume filter multiplies the audio amplitude
-        cmd = [
-            "ffmpeg",
-            "-i",
+        if not preprocess_audio(
             str(video_path),
-            "-af",
-            f"volume={volume_boost}",
-            "-c:v",
-            "copy",  # Copy video stream without re-encoding
-            "-y",  # Overwrite output file
             temp_path,
-        ]
+            volume_boost=volume_boost,
+            denoise=True,
+            normalize=True,
+        ):
+            video_logger.warning("Audio preprocessing failed; using original video")
+        else:
+            transcribe_path = temp_path
 
-        try:
-            result = subprocess.run(cmd, capture_output=True, text=True)
-            if result.returncode != 0:
-                video_logger.warning(
-                    "Failed to boost audio; using original video. ffmpeg output: %s",
-                    result.stderr,
-                )
-            else:
-                transcribe_path = temp_path
-        except Exception as e:
-            video_logger.warning(
-                "Failed to boost audio: %s. Using original video.",
-                e,
-            )
     result = model.transcribe(str(transcribe_path), word_timestamps=True, fp16=False)
     segments = result["segments"]
 
@@ -311,7 +355,7 @@ def main():
     input_dir = data_dir / "0_raw_videos"
     output_dir = data_dir / "1_clipped_videos"
     logging_dir = data_dir / "0_to_1_logs"
-    model_name = "medium.en"
+    model_name = "small.en"
 
     # MANUAL THRESHOLD: Set minimum probability for detecting "start" and "stop" words
     # Range: 0.0 (accept all) to 1.0 (only perfect confidence)
@@ -338,14 +382,14 @@ def main():
     model = whisper.load_model(model_name, device="cpu")
 
     # Find all MP4 videos
-    # video_files = list(input_dir.glob("*.mp4")) + list(input_dir.glob("*.MP4"))
-    video_files = [
-        # input_dir / "PXL_20260107_000456513.mp4",
-        # input_dir / "PXL_20260107_000551673.mp4",
-        # input_dir / "PXL_20260107_000725053.mp4",
-        input_dir / "PXL_20260107_000801717.mp4",
-        # input_dir / "PXL_20260107_000928516.mp4",
-    ]
+    video_files = list(input_dir.glob("*.mp4")) + list(input_dir.glob("*.MP4"))
+    # video_files = [
+    #     # input_dir / "PXL_20260107_000456513.mp4",
+    #     input_dir / "PXL_20260107_000551673.mp4",
+    #     # input_dir / "PXL_20260107_000725053.mp4",
+    #     # input_dir / "PXL_20260107_000801717.mp4",
+    #     # input_dir / "PXL_20260107_000928516.mp4",
+    # ]
 
     if not video_files:
         processing_logger.info("No MP4 files found in %s", input_dir)
