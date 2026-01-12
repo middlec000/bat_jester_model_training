@@ -6,7 +6,7 @@
     - Will do this after preprocessing pipeline is developed and we have the requirements on the videos
 
 # Data Preprocessing
-- [ ] (Step 1) Clip beginning and end of video so only video where juggling is happening remains
+- [x] (Step 1) Clip beginning and end of video so only video where juggling is happening remains
     - Use a speech model to identify where I say “start” and “stop” and trim before and after
     - Skip over (do not save) videos where either "start" or "stop" was not detected
     - Load from `data/0_raw_videos`
@@ -23,6 +23,7 @@
         - `.parquet` of xy labels: Frame, x, y
         - Frames where xy position could not be detected have NULL for x and y
 - [ ] (Step 3) Remove video segments where no x, y position could be found and save remaining as separate video segments (with separate x, y label files)
+    - Require segments to have a minimum duration of 1 second = 30 frames (@29.78150102817087 fps)
     - Load from `/data/1_clipped_videos`
         - Clipped `.mp4` video files
     - Load from `/data/2_ball_xy_positions`

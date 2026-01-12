@@ -132,6 +132,8 @@ def preprocess_audio(
         audio_filter,
         "-c:v",
         "copy",  # Copy video without re-encoding
+        "-movflags",
+        "+faststart",  # Move moov atom to beginning for better compatibility
         "-y",
         output_path,
     ]
@@ -318,6 +320,8 @@ def process_video(
         str(duration),  # Duration
         "-c",
         "copy",  # Copy streams without re-encoding
+        "-movflags",
+        "+faststart",  # Move moov atom to beginning
         "-y",  # Overwrite output
         output_path,
     ]
@@ -395,13 +399,28 @@ def main():
         processing_logger.info("No MP4 files found in %s", input_dir)
         return
 
-    processing_logger.info("Found %s video(s)", len(video_files))
+    # Filter out videos that have already been processed
+    logging_dir.mkdir(parents=True, exist_ok=True)
+    unprocessed_videos = []
+
+    for video_path in video_files:
+        log_file = logging_dir / f"{video_path.name}.log"
+        if log_file.exists():
+            processing_logger.info("Skipping %s (already processed)", video_path.name)
+        else:
+            unprocessed_videos.append(video_path)
+
+    if not unprocessed_videos:
+        processing_logger.info("All videos have already been processed")
+        return
+
+    processing_logger.info("Found %s video(s) to process", len(unprocessed_videos))
 
     # Process each video
     successful = 0
     skipped = 0
 
-    for video_path in video_files:
+    for video_path in unprocessed_videos:
         try:
             if process_video(
                 video_path,
@@ -424,7 +443,7 @@ def main():
     processing_logger.info("Processing complete!")
     processing_logger.info("  Successfully processed: %s", successful)
     processing_logger.info("  Skipped: %s", skipped)
-    processing_logger.info("  Total: %s", len(video_files))
+    processing_logger.info("  Total unprocessed videos: %s", len(unprocessed_videos))
     processing_logger.info("%s", "=" * 60)
     end_time = time()
     elapsed = end_time - start_time
