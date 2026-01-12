@@ -11,7 +11,7 @@ For each MP4 video in input_dir:
 Whisper model: https://github.com/openai/whisper/blob/main/model-card.md
 """
 
-import logging
+import sys
 import whisper
 import os
 from pathlib import Path
@@ -20,35 +20,10 @@ import tempfile
 import subprocess
 from time import time
 
+# Add parent directory to path so we can import bat_logging
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
-LOG_FORMAT = "%(asctime)s %(levelname)s %(message)s"
-LOG_DATEFMT = "%Y-%m-%d %H:%M:%S"
-_VIDEO_LOGGERS: dict[str, logging.Logger] = {}
-
-
-def get_processing_logger(output_dir: Path) -> logging.Logger:
-    logger = logging.getLogger("processing")
-    if not logger.handlers:
-        handler = logging.FileHandler(output_dir / "processing.log", encoding="utf-8")
-        handler.setFormatter(logging.Formatter(LOG_FORMAT, datefmt=LOG_DATEFMT))
-        logger.addHandler(handler)
-    logger.setLevel(logging.INFO)
-    logger.propagate = False
-    return logger
-
-
-def get_video_logger(video_name: str, output_dir: Path) -> logging.Logger:
-    if video_name not in _VIDEO_LOGGERS:
-        logger = logging.getLogger(f"video.{video_name}")
-        handler = logging.FileHandler(
-            output_dir / f"{video_name}.log", encoding="utf-8"
-        )
-        handler.setFormatter(logging.Formatter(LOG_FORMAT, datefmt=LOG_DATEFMT))
-        logger.addHandler(handler)
-        logger.setLevel(logging.DEBUG)
-        logger.propagate = False
-        _VIDEO_LOGGERS[video_name] = logger
-    return _VIDEO_LOGGERS[video_name]
+from bat_logging import logging_setup
 
 
 def find_all_word_timestamps(
@@ -171,7 +146,7 @@ def process_video(
         True if video was successfully processed, False otherwise
     """
     video_name = os.path.basename(video_path)
-    video_logger = get_video_logger(video_name, logging_dir)
+    video_logger = logging_setup.get_video_logger(video_name, logging_dir)
     processing_logger.info("Processing %s", video_name)
     video_logger.info("Processing %s", video_name)
 
@@ -372,7 +347,7 @@ def main():
     VOLUME_BOOST = 2.0  # Adjust this value as needed
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    processing_logger = get_processing_logger(logging_dir)
+    processing_logger = logging_setup.get_processing_logger(logging_dir)
     processing_logger.info("Configuration:")
     processing_logger.info("  Model: %s", model_name)
     processing_logger.info("  Min probability threshold: %s", MIN_PROBABILITY)
@@ -385,30 +360,11 @@ def main():
     processing_logger.info("Loading Whisper model...")
     model = whisper.load_model(model_name, device="cpu")
 
-    # Find all MP4 videos
-    video_files = list(input_dir.glob("*.mp4")) + list(input_dir.glob("*.MP4"))
-    # video_files = [
-    #     # input_dir / "PXL_20260107_000456513.mp4",
-    #     input_dir / "PXL_20260107_000551673.mp4",
-    #     # input_dir / "PXL_20260107_000725053.mp4",
-    #     # input_dir / "PXL_20260107_000801717.mp4",
-    #     # input_dir / "PXL_20260107_000928516.mp4",
-    # ]
-
-    if not video_files:
-        processing_logger.info("No MP4 files found in %s", input_dir)
-        return
-
     # Filter out videos that have already been processed
     logging_dir.mkdir(parents=True, exist_ok=True)
-    unprocessed_videos = []
-
-    for video_path in video_files:
-        log_file = logging_dir / f"{video_path.name}.log"
-        if log_file.exists():
-            processing_logger.info("Skipping %s (already processed)", video_path.name)
-        else:
-            unprocessed_videos.append(video_path)
+    unprocessed_videos = logging_setup.get_unprocessed_files(
+        input_dir, "mp4", logging_dir
+    )
 
     if not unprocessed_videos:
         processing_logger.info("All videos have already been processed")

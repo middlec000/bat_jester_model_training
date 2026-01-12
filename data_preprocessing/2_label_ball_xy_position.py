@@ -1,12 +1,19 @@
+import sys
+import logging
 from pathlib import Path
 from time import time
 import pandas as pd
 from video_labeler import SoccerJuggleVideoLabeler
 import cv2
 
+# Add parent directory to path so we can import bat_logging
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from bat_logging import logging_setup
+
 INPUT_PATH = Path("data/1_clipped_videos")
 OUTPUT_PATH = Path("data/2_ball_xy_positions")
-LOGGING_DIR = Path("data/1_to2_logs")
+LOGGING_DIR = Path("data/1_to_2_logs")
 
 
 def label_xy_positions(
@@ -14,15 +21,15 @@ def label_xy_positions(
     output_dir: Path,
     output_annotated: bool = True,
     confidence_threshold: float = 0.001,
+    video_logger: logging.Logger = None,
 ):
     """
     Process a single video and save:
     - Annotated video with ball positions overlaid
     - Parquet file with frame-by-frame ball positions (Frame, x, y)
     """
-    print(f"\n{'=' * 60}")
-    print(f"Processing video: {input_video_file_path.name}")
-    print(f"{'=' * 60}")
+    if video_logger:
+        video_logger.info("Processing video: %s", input_video_file_path.name)
 
     # Initialize labeler with low confidence threshold for ball detection
     labeler = SoccerJuggleVideoLabeler(
@@ -71,13 +78,16 @@ def label_xy_positions(
     detected_count = df[["x", "y"]].notna().all(axis=1).sum()
     total_count = len(df)
 
-    print("\nSummary:")
-    print(f"  - Total frames: {total_count}")
-    print(f"  - Frames with ball detected: {detected_count}")
-    print(f"  - Detection rate: {detected_count / total_count * 100:.1f}%")
-    if output_annotated:
-        print(f"  - Annotated video saved to: {annotated_output_path}")
-    print(f"  - Labels saved to: {parquet_output_path}")
+    if video_logger:
+        video_logger.info("Summary:")
+        video_logger.info("  - Total frames: %s", total_count)
+        video_logger.info("  - Frames with ball detected: %s", detected_count)
+        video_logger.info(
+            "  - Detection rate: %.1f%%", detected_count / total_count * 100
+        )
+        if output_annotated:
+            video_logger.info("  - Annotated video saved to: %s", annotated_output_path)
+        video_logger.info("  - Labels saved to: %s", parquet_output_path)
 
 
 if __name__ == "__main__":
@@ -85,26 +95,39 @@ if __name__ == "__main__":
 
     # Create output directory if it doesn't exist
     OUTPUT_PATH.mkdir(parents=True, exist_ok=True)
+    LOGGING_DIR.mkdir(parents=True, exist_ok=True)
 
-    # Get all MP4 files from input directory
-    input_video_files = list(INPUT_PATH.glob("*.mp4"))
-    input_video_files = [
-        f for f in input_video_files if f.stem == "PXL_20251215_232210350"
-    ]
+    processing_logger = logging_setup.get_processing_logger(LOGGING_DIR)
 
-    if not input_video_files:
-        print(f"No video files found in {INPUT_PATH}")
+    unprocessed_videos = logging_setup.get_unprocessed_files(
+        INPUT_PATH, "mp4", LOGGING_DIR
+    )
+
+    if not unprocessed_videos:
+        processing_logger.info("No video files found in %s", INPUT_PATH)
     else:
-        print(f"Found {len(input_video_files)} video(s) to process")
+        processing_logger.info("Found %s video(s) to process", len(unprocessed_videos))
 
-        for input_video_file_path in input_video_files:
-            label_xy_positions(
-                input_video_file_path, OUTPUT_PATH, confidence_threshold=0.001
+        for input_video_file_path in unprocessed_videos:
+            video_logger = logging_setup.get_video_logger(
+                input_video_file_path.name, LOGGING_DIR
             )
+            processing_logger.info("Processing %s", input_video_file_path.name)
+
+            label_xy_positions(
+                input_video_file_path,
+                OUTPUT_PATH,
+                confidence_threshold=0.001,
+                video_logger=video_logger,
+            )
+
+            video_logger.info("✓ Successfully processed %s", input_video_file_path.name)
 
         end_time = time()
 
-        # Print final summary
-        print(f"\n{'=' * 60}")
-        print(f"Processing completed in {end_time - start_time:.2f} seconds")
-        print(f"{'=' * 60}")
+        # Log final summary
+        processing_logger.info("%s", "=" * 60)
+        processing_logger.info(
+            "Processing completed in %.2f seconds", end_time - start_time
+        )
+        processing_logger.info("%s", "=" * 60)
