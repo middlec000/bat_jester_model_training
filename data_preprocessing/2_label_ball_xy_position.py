@@ -11,9 +11,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from bat_logging import logging_setup
 
-INPUT_PATH = Path("data/1_clipped_videos")
-OUTPUT_PATH = Path("data/2_ball_xy_positions")
-LOGGING_DIR = Path("data/1_to_2_logs")
+INPUT_PATH = Path("data/B_clipped_videos")
+OUTPUT_PATH = Path("data/C_ball_xy_positions")
+LOGGING_DIR = Path("data/2_logs")
 
 
 def label_xy_positions(
@@ -104,7 +104,7 @@ if __name__ == "__main__":
     )
 
     if not unprocessed_videos:
-        processing_logger.info("No video files found in %s", INPUT_PATH)
+        processing_logger.info("No new video files found in %s", INPUT_PATH)
     else:
         processing_logger.info("Found %s video(s) to process", len(unprocessed_videos))
 

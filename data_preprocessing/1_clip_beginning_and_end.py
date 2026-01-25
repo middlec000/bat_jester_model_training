@@ -331,9 +331,9 @@ def main():
     # data symlink is in the parent directory
     data_dir = (script_dir.parent / "data").resolve()
 
-    input_dir = data_dir / "0_raw_videos"
-    output_dir = data_dir / "1_clipped_videos"
-    logging_dir = data_dir / "0_to_1_logs"
+    input_dir = data_dir / "A_raw_videos"
+    output_dir = data_dir / "B_clipped_videos"
+    logging_dir = data_dir / "1_logs"
     model_name = "small.en"
 
     # MANUAL THRESHOLD: Set minimum probability for detecting "start" and "stop" words

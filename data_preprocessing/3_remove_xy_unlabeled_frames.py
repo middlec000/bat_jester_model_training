@@ -4,10 +4,10 @@ import pandas as pd
 from typing import List
 import logging
 
-VIDEO_DIR = Path("data/1_clipped_videos")
-BALL_XY_POSITIONS_DIR = Path("data/2_ball_xy_positions")
-OUTPUT_DIR = Path("data/3_completely_xy_labeled_clips")
-LOGGING_DIR = Path("data/2_to_3_logs")
+VIDEO_DIR = Path("data/B_clipped_videos")
+BALL_XY_POSITIONS_DIR = Path("data/C_ball_xy_positions")
+OUTPUT_DIR = Path("data/D_completely_xy_labeled_clips")
+LOGGING_DIR = Path("data/3_logs")
 
 MIN_FRAMES = 30
 
@@ -23,7 +23,20 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
 # OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+def collect_list_processed_videos(output_dir: Path) -> List[str]:
+    """Collect list of processed video stems in the output directory.
+
+    Returns the set of video stems that have already been processed.
+    Maps names from file names like "PXL_20251124_223727362.TS_seg5_xy_frame_labels.parquet" to "PXL_20251124_223727362.TS".
+
+    """
+    processed_videos = set()
+    for file in output_dir.glob("*_xy_frame_labels.parquet"):
+        stem = file.stem.split("_seg")[0]
+        processed_videos.add(stem)
+    return list(processed_videos)
 
 
 def find_null_frames(xy_labels_df: pd.DataFrame) -> List[int]:
@@ -163,13 +176,17 @@ def process_videos():
     """Process all videos in VIDEO_DIR."""
     logger.info(f"Starting video processing from {VIDEO_DIR}")
 
+    process_videos = collect_list_processed_videos(OUTPUT_DIR)
     mp4_files = sorted(VIDEO_DIR.glob("*.mp4"))
-    logger.info(f"Found {len(mp4_files)} .mp4 files")
+    unprocessed_videos = [f for f in mp4_files if f.stem not in process_videos]
+    logger.info(
+        f"Found {len(mp4_files)} .mp4 files and {len(unprocessed_videos)} unprocessed videos"
+    )
 
     total_segments = 0
     processed_count = 0
 
-    for video_path in mp4_files:
+    for video_path in unprocessed_videos:
         video_name = video_path.stem
 
         # Find corresponding parquet file
