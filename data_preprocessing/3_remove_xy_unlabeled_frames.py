@@ -2,7 +2,12 @@ from pathlib import Path
 import cv2
 import pandas as pd
 from typing import List
-import logging
+import sys
+
+# Add parent directory to path so we can import bat_logging
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from bat_logging import logging_setup
 
 VIDEO_DIR = Path("data/B_clipped_videos")
 BALL_XY_POSITIONS_DIR = Path("data/C_ball_xy_positions")
@@ -11,17 +16,7 @@ LOGGING_DIR = Path("data/3_logs")
 
 MIN_FRAMES = 30
 
-# Setup logging
-# LOGGING_DIR.mkdir(parents=True, exist_ok=True)
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s",
-    handlers=[
-        logging.FileHandler(LOGGING_DIR / "processing.log"),
-        logging.StreamHandler(),
-    ],
-)
-logger = logging.getLogger(__name__)
+logger = logging_setup.get_processing_logger(LOGGING_DIR)
 
 
 # OUTPUT_DIR.mkdir(parents=True, exist_ok=True)

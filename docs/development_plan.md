@@ -36,14 +36,14 @@
         - `.parquet` of xy labels: Frame, x, y
     - Save to `/data/3_logs`
         - Processing logs
-- [ ] (Step 4) Label ball juggle timestamps
-    - Not done but in [deprecated_run_data_labeling_steps.py](../data_preprocessing/deprecated_run_data_labeling_steps.py)
+- [x] (Step 4) Label ball juggle timestamps
     - Calculate vertical ball velocity from x, y positions
     - Add juggle timestamp label when ball switches from downward velocity to upward
     - Load from `/data/D_completely_xy_labeled_clips`
         - `.parquet` of xy labels: Frame, x, y
     - Save to `/data/E_juggle_labels`
-        - `.txt` with list of juggle timestamps
+        - `.parquet` with velocity, determined timestamps
+        - `.txt` with only list of juggle timestamps
     - Save to `/data/4_logs`
         - Processing logs
 - [ ] (Step 5) Separate the audio from the video
