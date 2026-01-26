@@ -53,12 +53,12 @@
         - `.wav` files
     - Save to `/data/5_logs`
         - Processing logs
-- [ ] (Step 6) Check that labels match up with data by plotting audio wave and juggle labels
+- [x] (Step 6) Check that labels match up with data by plotting audio wave and juggle labels
     - Load from `/data/E_juggle_labels`
         - `.json` with timestamps and length of clip
     - Load from `/dev/F_audio_extracted_from_videos/`
         - `.wav` files
-    - Save to `/data/6_audio_plots_with_labels`
+    - Save to `/data/G_audio_plots_with_labels`
     - Save to `/data/6_logs`
         - Processing logs
 
