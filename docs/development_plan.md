@@ -46,18 +46,17 @@
         - `.txt` with only list of juggle timestamps
     - Save to `/data/4_logs`
         - Processing logs
-- [ ] (Step 5) Separate the audio from the video
-    - Not done but in [deprecated_run_data_labeling_steps.py](../data_preprocessing/deprecated_run_data_labeling_steps.py)
-    - Load from `/data/E_juggle_labels`
+- [x] (Step 5) Separate the audio from the video
+    - Load from `/data/D_completely_xy_labeled_clips`
         - `.mp4` video files where every frame has an xy label
-    - Save to `/dev/F_audio/`
+    - Save to `/dev/F_audio_extracted_from_videos/`
         - `.wav` files
     - Save to `/data/5_logs`
         - Processing logs
 - [ ] (Step 6) Check that labels match up with data by plotting audio wave and juggle labels
     - Load from `/data/E_juggle_labels`
         - `.json` with timestamps and length of clip
-    - Load from `/dev/F_audio/`
+    - Load from `/dev/F_audio_extracted_from_videos/`
         - `.wav` files
     - Save to `/data/6_audio_plots_with_labels`
     - Save to `/data/6_logs`

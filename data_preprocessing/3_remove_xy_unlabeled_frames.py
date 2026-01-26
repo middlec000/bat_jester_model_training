@@ -3,6 +3,7 @@ import cv2
 import pandas as pd
 from typing import List
 import sys
+import subprocess
 
 # Add parent directory to path so we can import bat_logging
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -45,85 +46,85 @@ def split_video_at_frames(
     video_path: Path, null_frames: List[int], output_prefix: Path
 ) -> int:
     """
-    Split a video at specified frames and save segments.
+    Split a video at specified frames and save segments, preserving audio.
+
+    Uses ffmpeg to cut the video at the specified frame times while preserving
+    both video and audio streams.
 
     Returns the number of segments saved.
     """
     cap = cv2.VideoCapture(str(video_path))
     fps = cap.get(cv2.CAP_PROP_FPS)
-    frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+    cap.release()
+
+    if fps <= 0:
+        logger.warning(f"Could not determine FPS for {video_path.name}, using 30 fps")
+        fps = 30
 
     segments_saved = 0
-    frame_count = 0
-    segment_frames = []
     segment_num = 1
 
-    # Add sentinel values for easier processing
-    split_points = sorted(null_frames) + [float("inf")]
-    next_split_idx = 0
-    next_split = split_points[next_split_idx]
+    # Convert frame numbers to timestamps in seconds
+    split_times = sorted([frame / fps for frame in null_frames]) + [float("inf")]
+    split_times_with_frames = sorted(null_frames) + [float("inf")]
 
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            break
+    segment_start = 0
+    segment_start_time = 0.0
 
-        # Check if we need to save the current segment and start a new one
-        if frame_count >= next_split:
-            # Save current segment if it has enough frames
-            if len(segment_frames) >= MIN_FRAMES:
-                output_path = (
-                    output_prefix.parent
-                    / f"{output_prefix.stem}_seg{segment_num}{output_prefix.suffix}"
+    for split_idx, (split_frame, split_time) in enumerate(
+        zip(split_times_with_frames, split_times)
+    ):
+        segment_end = int(split_frame)
+        segment_end_time = split_time
+        segment_duration = segment_end_time - segment_start_time
+
+        # Convert to frame count
+        segment_frame_count = segment_end - segment_start
+
+        if segment_frame_count >= MIN_FRAMES:
+            output_path = (
+                output_prefix.parent
+                / f"{output_prefix.stem}_seg{segment_num}{output_prefix.suffix}"
+            )
+
+            # Use ffmpeg to cut the video while preserving audio
+            cmd = [
+                "ffmpeg",
+                "-i",
+                str(video_path),
+                "-ss",
+                str(segment_start_time),
+                "-to",
+                str(segment_end_time),
+                "-c:v",
+                "copy",  # Copy video codec without re-encoding
+                "-c:a",
+                "aac",  # Re-encode audio to AAC (compatible with mp4)
+                "-y",
+                "-loglevel",
+                "panic",
+                str(output_path),
+            ]
+
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            if result.returncode != 0:
+                logger.error(
+                    f"ffmpeg failed for segment {segment_num}: {result.stderr}"
                 )
-                out = cv2.VideoWriter(
-                    str(output_path), fourcc, fps, (frame_width, frame_height)
-                )
-                for seg_frame in segment_frames:
-                    out.write(seg_frame)
-                out.release()
+            else:
                 logger.info(
-                    f"Saved segment {segment_num}: {output_path} ({len(segment_frames)} frames)"
+                    f"Saved segment {segment_num}: {output_path} ({segment_frame_count} frames, {segment_duration:.2f}s)"
                 )
                 segments_saved += 1
-            elif len(segment_frames) > 0:
-                logger.debug(
-                    f"Discarded segment {segment_num}: {len(segment_frames)} frames (< {MIN_FRAMES})"
-                )
+        elif segment_frame_count > 0:
+            logger.debug(
+                f"Discarded segment {segment_num}: {segment_frame_count} frames (< {MIN_FRAMES})"
+            )
 
-            # Move to next split point
-            next_split_idx += 1
-            next_split = split_points[next_split_idx]
-            segment_frames = []
-            segment_num += 1
+        segment_start = segment_end
+        segment_start_time = segment_end_time
+        segment_num += 1
 
-        segment_frames.append(frame)
-        frame_count += 1
-
-    # Handle the last segment
-    if len(segment_frames) >= MIN_FRAMES:
-        output_path = (
-            output_prefix.parent
-            / f"{output_prefix.stem}_seg{segment_num}{output_prefix.suffix}"
-        )
-        out = cv2.VideoWriter(
-            str(output_path), fourcc, fps, (frame_width, frame_height)
-        )
-        for seg_frame in segment_frames:
-            out.write(seg_frame)
-        out.release()
-        logger.info(
-            f"Saved segment {segment_num}: {output_path} ({len(segment_frames)} frames)"
-        )
-        segments_saved += 1
-    elif len(segment_frames) > 0:
-        logger.debug(
-            f"Discarded segment {segment_num}: {len(segment_frames)} frames (< {MIN_FRAMES})"
-        )
-
-    cap.release()
     return segments_saved
 
 
@@ -210,40 +211,51 @@ def process_videos():
                 output_path = OUTPUT_DIR / video_path.name
                 annotated_output_path = OUTPUT_DIR / f"{video_name}_annotated.mp4"
 
-                # Copy the original video without splitting
-                cap = cv2.VideoCapture(str(video_path))
-                fps = cap.get(cv2.CAP_PROP_FPS)
-                frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-                frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-                fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-                out = cv2.VideoWriter(
-                    str(output_path), fourcc, fps, (frame_width, frame_height)
-                )
-                while True:
-                    ret, frame = cap.read()
-                    if not ret:
-                        break
-                    out.write(frame)
-                out.release()
-                cap.release()
-                logger.info(f"Copied {video_name} to {output_path}")
+                # Use ffmpeg to copy videos with audio preserved
+                cmd = [
+                    "ffmpeg",
+                    "-i",
+                    str(video_path),
+                    "-c:v",
+                    "copy",  # Copy video codec without re-encoding
+                    "-c:a",
+                    "aac",  # Re-encode audio to AAC (compatible with mp4)
+                    "-y",
+                    "-loglevel",
+                    "panic",
+                    str(output_path),
+                ]
+                result = subprocess.run(cmd, capture_output=True, text=True)
+                if result.returncode != 0:
+                    logger.error(
+                        f"ffmpeg failed copying {video_path.name}: {result.stderr}"
+                    )
+                else:
+                    logger.info(f"Copied {video_name} to {output_path}")
 
-                # Copy the annotated video without splitting
-                cap = cv2.VideoCapture(str(annotated_video_path))
-                fps = cap.get(cv2.CAP_PROP_FPS)
-                frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-                frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-                out = cv2.VideoWriter(
-                    str(annotated_output_path), fourcc, fps, (frame_width, frame_height)
-                )
-                while True:
-                    ret, frame = cap.read()
-                    if not ret:
-                        break
-                    out.write(frame)
-                out.release()
-                cap.release()
-                logger.info(f"Copied annotated {video_name} to {annotated_output_path}")
+                # Copy the annotated video with audio preserved
+                cmd = [
+                    "ffmpeg",
+                    "-i",
+                    str(annotated_video_path),
+                    "-c:v",
+                    "copy",  # Copy video codec without re-encoding
+                    "-c:a",
+                    "aac",  # Re-encode audio to AAC (compatible with mp4)
+                    "-y",
+                    "-loglevel",
+                    "panic",
+                    str(annotated_output_path),
+                ]
+                result = subprocess.run(cmd, capture_output=True, text=True)
+                if result.returncode != 0:
+                    logger.error(
+                        f"ffmpeg failed copying annotated video: {result.stderr}"
+                    )
+                else:
+                    logger.info(
+                        f"Copied annotated {video_name} to {annotated_output_path}"
+                    )
 
                 # Copy parquet file as-is
                 output_parquet_path = (
