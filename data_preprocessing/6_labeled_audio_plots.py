@@ -20,7 +20,7 @@ logger = logging_setup.get_processing_logger(LOGGING_DIR)
 
 input_files = list(AUDIO_DIR.glob("*.wav"))
 processed_files = list(OUTPUT_DIR.glob("*.png"))
-processed_files = list()
+# processed_files = list()
 unprocessed_files = [
     f
     for f in input_files

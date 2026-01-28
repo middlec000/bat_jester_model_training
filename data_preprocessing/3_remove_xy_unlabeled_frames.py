@@ -20,7 +20,6 @@ MIN_FRAMES = 30
 logger = logging_setup.get_processing_logger(LOGGING_DIR)
 
 
-# OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 def collect_list_processed_videos(output_dir: Path) -> List[str]:
     """Collect list of processed video stems in the output directory.
 
@@ -43,7 +42,10 @@ def find_null_frames(xy_labels_df: pd.DataFrame) -> List[int]:
 
 
 def split_video_at_frames(
-    video_path: Path, null_frames: List[int], output_prefix: Path
+    video_path: Path,
+    null_frames: List[int],
+    output_prefix: Path,
+    annotated: bool = False,
 ) -> int:
     """
     Split a video at specified frames and save segments, preserving audio.
@@ -51,10 +53,17 @@ def split_video_at_frames(
     Uses ffmpeg to cut the video at the specified frame times while preserving
     both video and audio streams.
 
+    Args:
+        video_path: Path to the input video
+        null_frames: List of frame indices where to split
+        output_prefix: Prefix for output files
+        annotated: If True, uses {stem}_seg{N}_annotated.mp4 naming, else {stem}_seg{N}.mp4
+
     Returns the number of segments saved.
     """
     cap = cv2.VideoCapture(str(video_path))
     fps = cap.get(cv2.CAP_PROP_FPS)
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     cap.release()
 
     if fps <= 0:
@@ -74,7 +83,7 @@ def split_video_at_frames(
     for split_idx, (split_frame, split_time) in enumerate(
         zip(split_times_with_frames, split_times)
     ):
-        segment_end = int(split_frame)
+        segment_end = int(split_frame) if split_frame != float("inf") else total_frames
         segment_end_time = split_time
         segment_duration = segment_end_time - segment_start_time
 
@@ -82,10 +91,16 @@ def split_video_at_frames(
         segment_frame_count = segment_end - segment_start
 
         if segment_frame_count >= MIN_FRAMES:
-            output_path = (
-                output_prefix.parent
-                / f"{output_prefix.stem}_seg{segment_num}{output_prefix.suffix}"
-            )
+            if annotated:
+                output_path = (
+                    output_prefix.parent
+                    / f"{output_prefix.stem.replace('_annotated', '')}_seg{segment_num}_annotated{output_prefix.suffix}"
+                )
+            else:
+                output_path = (
+                    output_prefix.parent
+                    / f"{output_prefix.stem}_seg{segment_num}{output_prefix.suffix}"
+                )
 
             # Use ffmpeg to cut the video while preserving audio
             cmd = [
@@ -144,13 +159,12 @@ def split_parquet_at_frames(
     split_points = sorted(null_frames) + [float("inf")]
 
     for split_idx, split_point in enumerate(split_points):
-        end_frame = int(split_point)
+        end_frame = int(split_point) if split_point != float("inf") else len(df)
         segment_df = df.iloc[start_frame:end_frame].copy()
 
         if len(segment_df) >= MIN_FRAMES:
             output_path = (
-                output_prefix.parent
-                / f"{video_stem}_seg{segment_num}_xy_frame_labels.parquet"
+                output_prefix.parent / f"{video_stem}_seg{segment_num}.parquet"
             )
             segment_df.to_parquet(output_path)
             logger.info(
@@ -172,9 +186,10 @@ def process_videos():
     """Process all videos in VIDEO_DIR."""
     logger.info(f"Starting video processing from {VIDEO_DIR}")
 
-    process_videos = collect_list_processed_videos(OUTPUT_DIR)
+    processed_videos = collect_list_processed_videos(OUTPUT_DIR)
     mp4_files = sorted(VIDEO_DIR.glob("*.mp4"))
-    unprocessed_videos = [f for f in mp4_files if f.stem not in process_videos]
+    unprocessed_videos = [f for f in mp4_files if f.stem not in processed_videos]
+    # unprocessed_videos = mp4_files
     logger.info(
         f"Found {len(mp4_files)} .mp4 files and {len(unprocessed_videos)} unprocessed videos"
     )
@@ -186,7 +201,7 @@ def process_videos():
         video_name = video_path.stem
 
         # Find corresponding parquet file
-        parquet_path = BALL_XY_POSITIONS_DIR / f"{video_name}_xy_frame_labels.parquet"
+        parquet_path = BALL_XY_POSITIONS_DIR / f"{video_name}.parquet"
 
         # Find corresponding annotated video
         annotated_video_path = BALL_XY_POSITIONS_DIR / f"{video_name}_annotated.mp4"
@@ -258,9 +273,7 @@ def process_videos():
                     )
 
                 # Copy parquet file as-is
-                output_parquet_path = (
-                    OUTPUT_DIR / f"{video_name}_xy_frame_labels.parquet"
-                )
+                output_parquet_path = OUTPUT_DIR / f"{video_name}.parquet"
                 xy_labels_df.to_parquet(output_parquet_path)
                 logger.info(f"Copied parquet for {video_name} to {output_parquet_path}")
 
@@ -279,7 +292,10 @@ def process_videos():
                 # Split annotated video at null frames
                 annotated_output_prefix = OUTPUT_DIR / f"{video_name}_annotated.mp4"
                 split_video_at_frames(
-                    annotated_video_path, null_frames, annotated_output_prefix
+                    annotated_video_path,
+                    null_frames,
+                    annotated_output_prefix,
+                    annotated=True,
                 )
 
                 # Split parquet file at null frames

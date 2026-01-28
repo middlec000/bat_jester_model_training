@@ -69,9 +69,7 @@ def label_xy_positions(
         df["y"] = None
 
     # Save as parquet
-    parquet_output_path = output_dir / (
-        input_video_file_path.stem + "_xy_frame_labels.parquet"
-    )
+    parquet_output_path = output_dir / (input_video_file_path.stem + ".parquet")
     df[["Frame", "x", "y"]].to_parquet(parquet_output_path, index=False)
 
     # Calculate detection statistics
