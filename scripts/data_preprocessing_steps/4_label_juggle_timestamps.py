@@ -4,9 +4,9 @@ import sys
 import polars as pl
 
 # Add parent directory to path so we can import bat_logging
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from bat_logging import logging_setup
+from src import logging_setup
 
 INPUT_DIR = Path("data/D_completely_xy_labeled_clips")
 OUTPUT_DIR = Path("data/E_juggle_labels")
@@ -19,10 +19,12 @@ logger = logging_setup.get_processing_logger(LOGGING_DIR)
 
 input_files = list(INPUT_DIR.glob("*.parquet"))
 processed_files = list(OUTPUT_DIR.glob("*.parquet"))
-# processed_files = list()
-unprocessed_files = [
-    f for f in input_files if (OUTPUT_DIR / f.name) not in processed_files
-]
+unprocessed_files = logging_setup.get_unprocessed_files(
+    input_dir=INPUT_DIR,
+    input_filetype="parquet",
+    output_dir=OUTPUT_DIR,
+    output_filetype="parquet",
+)
 
 for xy_label_file in unprocessed_files:
     output_file = OUTPUT_DIR / xy_label_file.name

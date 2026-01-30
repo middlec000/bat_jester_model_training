@@ -4,9 +4,9 @@ import sys
 import os
 
 # Add parent directory to path so we can import bat_logging
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from bat_logging import logging_setup
+from src import logging_setup
 
 INPUT_DIR = Path("data/D_completely_xy_labeled_clips")
 OUTPUT_DIR = Path("data/F_audio_extracted_from_videos")
@@ -16,11 +16,12 @@ logger = logging_setup.get_processing_logger(LOGGING_DIR)
 
 input_files = [x for x in list(INPUT_DIR.glob("*.mp4")) if "_annotated_" not in x.stem]
 processed_files = list(OUTPUT_DIR.glob("*.wav"))
-unprocessed_files = [
-    f
-    for f in input_files
-    if (OUTPUT_DIR / f.with_suffix(".wav").name) not in processed_files
-]
+unprocessed_files = logging_setup.get_unprocessed_files(
+    input_dir=INPUT_DIR,
+    input_filetype="mp4",
+    output_dir=OUTPUT_DIR,
+    output_filetype="wav",
+)
 
 for video_file in unprocessed_files:
     output_file = OUTPUT_DIR / video_file.with_suffix(".wav").name

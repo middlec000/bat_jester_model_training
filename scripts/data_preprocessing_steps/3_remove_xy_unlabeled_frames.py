@@ -6,9 +6,9 @@ import sys
 import subprocess
 
 # Add parent directory to path so we can import bat_logging
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from bat_logging import logging_setup
+from src import logging_setup
 
 VIDEO_DIR = Path("data/B_clipped_videos")
 BALL_XY_POSITIONS_DIR = Path("data/C_ball_xy_positions")
@@ -24,11 +24,11 @@ def collect_list_processed_videos(output_dir: Path) -> List[str]:
     """Collect list of processed video stems in the output directory.
 
     Returns the set of video stems that have already been processed.
-    Maps names from file names like "PXL_20251124_223727362.TS_seg5_xy_frame_labels.parquet" to "PXL_20251124_223727362.TS".
+    Maps names from file names like "PXL_20251124_223727362.TS_seg5.parquet" to "PXL_20251124_223727362.TS".
 
     """
     processed_videos = set()
-    for file in output_dir.glob("*_xy_frame_labels.parquet"):
+    for file in output_dir.glob("*.parquet"):
         stem = file.stem.split("_seg")[0]
         processed_videos.add(stem)
     return list(processed_videos)

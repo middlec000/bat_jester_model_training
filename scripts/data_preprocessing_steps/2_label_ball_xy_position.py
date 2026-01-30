@@ -3,13 +3,12 @@ import logging
 from pathlib import Path
 from time import time
 import pandas as pd
-from video_labeler import SoccerJuggleVideoLabeler
 import cv2
 
 # Add parent directory to path so we can import bat_logging
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from bat_logging import logging_setup
+from src import logging_setup, video_labeler
 
 INPUT_PATH = Path("data/B_clipped_videos")
 OUTPUT_PATH = Path("data/C_ball_xy_positions")
@@ -32,7 +31,7 @@ def label_xy_positions(
         video_logger.info("Processing video: %s", input_video_file_path.name)
 
     # Initialize labeler with low confidence threshold for ball detection
-    labeler = SoccerJuggleVideoLabeler(
+    labeler = video_labeler.SoccerJuggleVideoLabeler(
         video_path=str(input_video_file_path), confidence_threshold=confidence_threshold
     )
 
@@ -98,7 +97,7 @@ if __name__ == "__main__":
     processing_logger = logging_setup.get_processing_logger(LOGGING_DIR)
 
     unprocessed_videos = logging_setup.get_unprocessed_files(
-        INPUT_PATH, "mp4", LOGGING_DIR
+        INPUT_PATH, "mp4", OUTPUT_PATH, "parquet"
     )
 
     if not unprocessed_videos:
@@ -107,7 +106,7 @@ if __name__ == "__main__":
         processing_logger.info("Found %s video(s) to process", len(unprocessed_videos))
 
         for input_video_file_path in unprocessed_videos:
-            video_logger = logging_setup.get_video_logger(
+            video_logger = logging_setup.get_file_logger(
                 input_video_file_path.name, LOGGING_DIR
             )
             processing_logger.info("Processing %s", input_video_file_path.name)

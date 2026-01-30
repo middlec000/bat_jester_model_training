@@ -1,15 +1,15 @@
 from pathlib import Path
 from time import time
 import sys
-
-# Add parent directory to path so we can import bat_logging
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
-from bat_logging import logging_setup
 import librosa
 import librosa.display
 import matplotlib.pyplot as plt
 import numpy as np
+
+# Add parent directory to path so we can import bat_logging
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
+from src import logging_setup
 
 LABELS_DIR = Path("data/E_juggle_labels")
 AUDIO_DIR = Path("data/F_audio_extracted_from_videos")
@@ -20,17 +20,15 @@ logger = logging_setup.get_processing_logger(LOGGING_DIR)
 
 input_files = list(AUDIO_DIR.glob("*.wav"))
 processed_files = list(OUTPUT_DIR.glob("*.png"))
-# processed_files = list()
-unprocessed_files = [
-    f
-    for f in input_files
-    if (OUTPUT_DIR / f.with_suffix(".png").name) not in processed_files
-]
+unprocessed_files = logging_setup.get_unprocessed_files(
+    input_dir=AUDIO_DIR,
+    input_filetype="wav",
+    output_dir=OUTPUT_DIR,
+    output_filetype="png",
+)
 
 for audio_filename in unprocessed_files:
-    label_file = LABELS_DIR / (
-        audio_filename.stem + "_xy_frame_labels_juggle_timestamps.txt"
-    )
+    label_file = LABELS_DIR / (audio_filename.stem + ".txt")
     output_file = OUTPUT_DIR / audio_filename.with_suffix(".png").name
     start_time = time()
     try:

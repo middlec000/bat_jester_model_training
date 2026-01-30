@@ -11,7 +11,6 @@ For each MP4 video in input_dir:
 Whisper model: https://github.com/openai/whisper/blob/main/model-card.md
 """
 
-import sys
 import whisper
 import os
 from pathlib import Path
@@ -19,11 +18,16 @@ from moviepy import VideoFileClip
 import tempfile
 import subprocess
 from time import time
+import sys
 
 # Add parent directory to path so we can import bat_logging
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from bat_logging import logging_setup
+from src import logging_setup
+
+INPUT_DIR = Path("data/A_raw_videos")
+OUTPUT_DIR = Path("data/B_clipped_videos")
+LOGGING_DIR = Path("data/1_logs")
 
 
 def find_all_word_timestamps(
@@ -146,7 +150,8 @@ def process_video(
         True if video was successfully processed, False otherwise
     """
     video_name = os.path.basename(video_path)
-    video_logger = logging_setup.get_video_logger(video_name, logging_dir)
+    video_stem = os.path.splitext(video_name)[0]
+    video_logger = logging_setup.get_file_logger(video_stem, logging_dir)
     processing_logger.info("Processing %s", video_name)
     video_logger.info("Processing %s", video_name)
 
@@ -326,14 +331,7 @@ def process_video(
 
 def main():
     start_time = time()
-    # Get the directory where this script is located
-    script_dir = Path(__file__).parent
-    # data symlink is in the parent directory
-    data_dir = (script_dir.parent / "data").resolve()
 
-    input_dir = data_dir / "A_raw_videos"
-    output_dir = data_dir / "B_clipped_videos"
-    logging_dir = data_dir / "1_logs"
     model_name = "small.en"
 
     # MANUAL THRESHOLD: Set minimum probability for detecting "start" and "stop" words
@@ -346,24 +344,27 @@ def main():
     # Recommended: Start with 2.0-5.0 for quiet videos
     VOLUME_BOOST = 2.0  # Adjust this value as needed
 
-    output_dir.mkdir(parents=True, exist_ok=True)
-    processing_logger = logging_setup.get_processing_logger(logging_dir)
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    processing_logger = logging_setup.get_processing_logger(LOGGING_DIR)
     processing_logger.info("Configuration:")
     processing_logger.info("  Model: %s", model_name)
     processing_logger.info("  Min probability threshold: %s", MIN_PROBABILITY)
     processing_logger.info("  Audio volume boost: %sx", VOLUME_BOOST)
-    processing_logger.info("  Input directory: %s", input_dir)
-    processing_logger.info("  Output directory: %s", output_dir)
-    processing_logger.info("  Logging directory: %s", logging_dir)
+    processing_logger.info("  Input directory: %s", INPUT_DIR)
+    processing_logger.info("  Output directory: %s", OUTPUT_DIR)
+    processing_logger.info("  Logging directory: %s", LOGGING_DIR)
 
     # Load Whisper model
     processing_logger.info("Loading Whisper model...")
     model = whisper.load_model(model_name, device="cpu")
 
     # Filter out videos that have already been processed
-    logging_dir.mkdir(parents=True, exist_ok=True)
+    LOGGING_DIR.mkdir(parents=True, exist_ok=True)
     unprocessed_videos = logging_setup.get_unprocessed_files(
-        input_dir, "mp4", logging_dir
+        input_dir=INPUT_DIR,
+        input_filetype="mp4",
+        output_dir=LOGGING_DIR,
+        output_filetype="log",
     )
 
     if not unprocessed_videos:
@@ -380,10 +381,10 @@ def main():
         try:
             if process_video(
                 video_path,
-                output_dir,
+                OUTPUT_DIR,
                 model,
                 processing_logger,
-                logging_dir,
+                LOGGING_DIR,
                 MIN_PROBABILITY,
                 VOLUME_BOOST,
             ):
