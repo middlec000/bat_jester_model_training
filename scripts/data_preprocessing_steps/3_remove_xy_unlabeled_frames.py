@@ -105,16 +105,22 @@ def split_video_at_frames(
             # Use ffmpeg to cut the video while preserving audio
             cmd = [
                 "ffmpeg",
-                "-i",
-                str(video_path),
                 "-ss",
                 str(segment_start_time),
+                "-i",
+                str(video_path),
                 "-to",
                 str(segment_end_time),
                 "-c:v",
-                "copy",  # Copy video codec without re-encoding
+                "libx264",  # Re-encode video with H.264
+                "-preset",
+                "fast",  # Balance between speed and file size
+                "-crf",
+                "23",  # Constant Rate Factor (18-28, lower = better quality)
                 "-c:a",
-                "aac",  # Re-encode audio to AAC (compatible with mp4)
+                "aac",
+                "-b:a",
+                "128k",  # Audio bitrate
                 "-y",
                 "-loglevel",
                 "panic",
@@ -188,8 +194,8 @@ def process_videos():
 
     processed_videos = collect_list_processed_videos(OUTPUT_DIR)
     mp4_files = sorted(VIDEO_DIR.glob("*.mp4"))
-    unprocessed_videos = [f for f in mp4_files if f.stem not in processed_videos]
-    # unprocessed_videos = mp4_files
+    # unprocessed_videos = [f for f in mp4_files if f.stem not in processed_videos]
+    unprocessed_videos = mp4_files
     logger.info(
         f"Found {len(mp4_files)} .mp4 files and {len(unprocessed_videos)} unprocessed videos"
     )
