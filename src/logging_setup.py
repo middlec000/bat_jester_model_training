@@ -1,5 +1,8 @@
 import logging
 from pathlib import Path
+import shutil
+import subprocess
+from fractions import Fraction
 
 
 LOG_FORMAT = "%(asctime)s %(levelname)s %(message)s"
@@ -43,3 +46,56 @@ def get_unprocessed_files(
         input_files[stem] for stem in input_files if stem not in output_files
     ]
     return unprocessed_files
+
+
+def get_video_fps(video_path: Path) -> float | None:
+    """Return FPS (as float) for video using ffprobe, or None if it cannot be determined."""
+    if not shutil.which("ffprobe"):
+        return None
+
+    cmd = [
+        "ffprobe",
+        "-v",
+        "error",
+        "-select_streams",
+        "v:0",
+        "-show_entries",
+        "stream=avg_frame_rate",
+        "-of",
+        "default=noprint_wrappers=1:nokey=1",
+        str(video_path),
+    ]
+
+    proc = subprocess.run(cmd, capture_output=True, text=True)
+    if proc.returncode != 0:
+        return None
+
+    out = proc.stdout.strip()
+    if not out:
+        return None
+
+    try:
+        return float(Fraction(out))
+    except Exception:
+        return None
+
+
+def video_has_audio(video_path: Path) -> bool:
+    if not shutil.which("ffprobe"):
+        return False
+    cmd = [
+        "ffprobe",
+        "-v",
+        "error",
+        "-select_streams",
+        "a",
+        "-show_entries",
+        "stream=index",
+        "-of",
+        "csv=p=0",
+        str(video_path),
+    ]
+    proc = subprocess.run(cmd, capture_output=True, text=True)
+    if proc.returncode != 0:
+        return False
+    return bool(proc.stdout.strip())

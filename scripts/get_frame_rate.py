@@ -1,30 +1,28 @@
 from pathlib import Path
-import cv2
+import sys
+
+# Add parent directory to path so we can import bat_logging
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from src import logging_setup
 
 INPUT_FILE = Path(
-    "data/D_completely_xy_labeled_clips/PXL_20251124_223727362.TS_annotated_seg11.mp4"
+    "/home/colin/data/bat_jester_model_training/D_completely_xy_labeled_clips/PXL_20251124_223727362.TS_seg1.mp4"
+)
+INPUT_FILE = Path(
+    "/home/colin/data/bat_jester_model_training/D_completely_xy_labeled_clips/PXL_20251124_223727362.TS_seg1_annotated.mp4"
 )
 
-# Open the video file
-cap = cv2.VideoCapture(str(INPUT_FILE))
-
-# Get the frame rate (frames per second)
-fps = cap.get(cv2.CAP_PROP_FPS)
-
-# Get other useful properties
-frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-duration = frame_count / fps if fps > 0 else 0
+fps = logging_setup.get_video_fps(INPUT_FILE)
 
 print(f"Video: {INPUT_FILE.name}")
 print(f"Frame Rate (FPS): {fps}")
-print(f"Total Frames: {frame_count}")
-print(f"Duration: {duration:.2f} seconds")
 
-cap.release()
 
 """
-Video: PXL_20251124_223727362.TS_annotated_seg11.mp4
+Video: PXL_20251124_223727362.TS_seg1.mp4
 Frame Rate (FPS): 30.0
-Total Frames: 30
-Duration: 1.00 seconds
+
+Video: PXL_20251124_223727362.TS_seg1_annotated.mp4
+Frame Rate (FPS): 30.0
 """

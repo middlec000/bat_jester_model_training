@@ -5,7 +5,7 @@ Script to trim videos based on voice commands "start" and "stop" detected by Whi
 For each MP4 video in input_dir:
 1. Use Whisper to transcribe the audio and detect timestamps
 2. Find when "start" and "stop" are said
-3. If both words are detected, trim the video (start - 3s to stop + 3s)
+3. If both words are detected, trim the video (from start + START_BUFFER_SECONDS to stop - STOP_BUFFER_SECONDS)
 4. Save the trimmed video to output_dir
 
 Whisper model: https://github.com/openai/whisper/blob/main/model-card.md
@@ -28,6 +28,12 @@ from src import logging_setup
 INPUT_DIR = Path("data/A_raw_videos")
 OUTPUT_DIR = Path("~/data/bat_jester_model_training/B_clipped_videos").expanduser()
 LOGGING_DIR = Path("~/data/bat_jester_model_training/1_logs").expanduser()
+
+MODEL_NAME = "medium.en"
+START_BUFFER_SECONDS = 2.0
+STOP_BUFFER_SECONDS = 3.0
+MIN_PROBABILITY = 0.05
+VOLUME_BOOST = 2.0
 
 
 def find_all_word_timestamps(
@@ -263,9 +269,14 @@ def process_video(
     video_logger.info("Detected 'start' at %0.2fs (prob: %.3f)", start_time, start_prob)
     video_logger.info("Detected 'stop' at %0.2fs (prob: %.3f)", stop_time, stop_prob)
 
-    # Calculate trim points (with 3-second buffer)
-    trim_start = start_time + 1
-    trim_end = stop_time - 2
+    # Calculate trim points using configured buffers
+    # Start buffer: seconds after the 'start' word to begin the clip
+    # Stop buffer: seconds before the 'stop' word to end the clip
+    trim_start = start_time + START_BUFFER_SECONDS
+    trim_end = stop_time - STOP_BUFFER_SECONDS
+
+    # Ensure trim_start is non-negative
+    trim_start = max(0.0, trim_start)
 
     video_logger.info("Trimming video from %0.2fs to %0.2fs", trim_start, trim_end)
 
@@ -335,25 +346,15 @@ def main():
     # Parse command-line arguments
     run_all = "--run-all" in sys.argv
 
-    model_name = "small.en"
-
-    # MANUAL THRESHOLD: Set minimum probability for detecting "start" and "stop" words
-    # Range: 0.0 (accept all) to 1.0 (only perfect confidence)
-    # Lower values (e.g., 0.3-0.5) will catch more words but may include false positives
-    MIN_PROBABILITY = 0.05  # Adjust this value as needed
-
-    # AUDIO VOLUME BOOST: Multiply audio volume to help Whisper detect quiet speech
-    # Range: 1.0 (no change) to 10.0 (very loud)
-    # Recommended: Start with 2.0-5.0 for quiet videos
-    VOLUME_BOOST = 2.0  # Adjust this value as needed
-
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     LOGGING_DIR.mkdir(parents=True, exist_ok=True)
     processing_logger = logging_setup.get_processing_logger(LOGGING_DIR)
     processing_logger.info("Configuration:")
-    processing_logger.info("  Model: %s", model_name)
+    processing_logger.info("  Model: %s", MODEL_NAME)
     processing_logger.info("  Min probability threshold: %s", MIN_PROBABILITY)
     processing_logger.info("  Audio volume boost: %sx", VOLUME_BOOST)
+    processing_logger.info("  Start buffer seconds: %s", START_BUFFER_SECONDS)
+    processing_logger.info("  Stop buffer seconds: %s", STOP_BUFFER_SECONDS)
     processing_logger.info("  Input directory: %s", INPUT_DIR)
     processing_logger.info("  Output directory: %s", OUTPUT_DIR)
     processing_logger.info("  Logging directory: %s", LOGGING_DIR)
@@ -363,7 +364,7 @@ def main():
 
     # Load Whisper model
     processing_logger.info("Loading Whisper model...")
-    model = whisper.load_model(model_name, device="cpu")
+    model = whisper.load_model(MODEL_NAME, device="cpu")
 
     # Filter out videos that have already been processed
     LOGGING_DIR.mkdir(parents=True, exist_ok=True)
@@ -419,3 +420,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+"""
+uv run python scripts/data_preprocessing_steps/1_clip_beginning_and_end.py --run-all
+"""

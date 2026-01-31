@@ -7,7 +7,6 @@ Preserves audio tracks in the output videos.
 from pathlib import Path
 import polars as pl
 from typing import List
-from fractions import Fraction
 import sys
 import subprocess
 import shutil
@@ -163,63 +162,6 @@ def copy_video_with_audio(
         return False
 
 
-def _get_video_fps(video_path: Path, logger: logging.Logger) -> float | None:
-    """Return FPS (as float) for video using ffprobe, or None if it cannot be determined."""
-    if not shutil.which("ffprobe"):
-        logger.debug("ffprobe not found; cannot determine FPS")
-        return None
-
-    cmd = [
-        "ffprobe",
-        "-v",
-        "error",
-        "-select_streams",
-        "v:0",
-        "-show_entries",
-        "stream=avg_frame_rate",
-        "-of",
-        "default=noprint_wrappers=1:nokey=1",
-        str(video_path),
-    ]
-
-    proc = subprocess.run(cmd, capture_output=True, text=True)
-    if proc.returncode != 0:
-        logger.debug(
-            f"ffprobe failed to probe FPS for {video_path}: {proc.stderr.strip()}"
-        )
-        return None
-
-    out = proc.stdout.strip()
-    if not out:
-        return None
-
-    try:
-        return float(Fraction(out))
-    except Exception:
-        return None
-
-
-def _video_has_audio(video_path: Path) -> bool:
-    if not shutil.which("ffprobe"):
-        return False
-    cmd = [
-        "ffprobe",
-        "-v",
-        "error",
-        "-select_streams",
-        "a",
-        "-show_entries",
-        "stream=index",
-        "-of",
-        "csv=p=0",
-        str(video_path),
-    ]
-    proc = subprocess.run(cmd, capture_output=True, text=True)
-    if proc.returncode != 0:
-        return False
-    return bool(proc.stdout.strip())
-
-
 def split_video_at_frames(
     video_path: Path,
     nonnull_segments: List[tuple],
@@ -238,8 +180,10 @@ def split_video_at_frames(
     """
     segments_saved = 0
 
-    fps = _get_video_fps(video_path, logger)
-    has_audio = _video_has_audio(video_path)
+    fps = logging_setup.get_video_fps(video_path)
+    if fps is None:
+        logger.debug(f"ffprobe failed to probe FPS for {video_path}")
+    has_audio = logging_setup.video_has_audio(video_path)
 
     for segment_num, (start_frame, end_frame) in enumerate(nonnull_segments, 1):
         frame_count = end_frame - start_frame + 1
@@ -393,10 +337,6 @@ def main():
     logger.info(
         f"Found {len(mp4_files)} .mp4 files and {len(unprocessed_videos)} unprocessed videos"
     )
-
-    unprocessed_videos = unprocessed_videos[
-        :1
-    ]  # Limit for testing; remove or adjust as needed
 
     total_segments = 0
     processed_count = 0

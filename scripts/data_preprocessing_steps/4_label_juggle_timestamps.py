@@ -15,7 +15,7 @@ OUTPUT_DIR = Path("~/data/bat_jester_model_training/E_juggle_labels").expanduser
 LOGGING_DIR = Path("~/data/bat_jester_model_training/4_logs").expanduser()
 
 
-FRAMES_PER_SECOND = 30.0  # 29.78150102817087
+FALLBACK_FRAMES_PER_SECOND = 30.0
 
 
 def main():
@@ -45,17 +45,20 @@ def main():
         logger.info(f"Processing unprocessed files: {len(unprocessed_files)} files")
 
     for xy_label_file in unprocessed_files:
+        video_file = INPUT_DIR / f"{xy_label_file.stem}.mp4"
         output_file = OUTPUT_DIR / xy_label_file.name
         output_txt = OUTPUT_DIR / f"{xy_label_file.stem}.txt"
 
         start_time = time()
         df = pl.read_parquet(xy_label_file)
 
+        fps = logging_setup.get_video_fps(video_file) or FALLBACK_FRAMES_PER_SECOND
+
         # Calculate vertical ball velocity (change in y position)
         df = df.with_columns(
             pl.col("y").diff().alias("vertical_velocity"),
             pl.int_range(0, pl.len()).alias("frame_index"),
-            (pl.int_range(0, pl.len()) / FRAMES_PER_SECOND).alias("time_seconds"),
+            (pl.int_range(0, pl.len()) / fps).alias("time_seconds"),
         )
 
         # Detect juggle timestamps: when ball transitions from downward to upward
