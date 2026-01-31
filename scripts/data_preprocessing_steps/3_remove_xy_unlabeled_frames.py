@@ -9,7 +9,8 @@ import polars as pl
 from typing import List
 from fractions import Fraction
 import sys
-import av
+import subprocess
+import shutil
 import logging
 
 # Add parent directory to path so we can import bat_logging
@@ -126,7 +127,7 @@ def copy_video_with_audio(
     input_path: Path, output_path: Path, logger: logging.Logger
 ) -> bool:
     """
-    Copy a video file preserving both video and audio streams using PyAV.
+    Copy a video file preserving both video and audio streams using ffmpeg subprocess.
 
     Args:
         input_path: Path to input video
@@ -136,59 +137,87 @@ def copy_video_with_audio(
         True if successful, False otherwise
     """
     try:
-        input_container = av.open(str(input_path))
-        output_container = av.open(str(output_path), mode="w")
-
-        # Copy video stream
-        if input_container.streams.video:
-            input_video = input_container.streams.video[0]
-            output_video = output_container.add_stream(
-                "libx264", rate=input_video.average_rate
-            )
-            output_video.width = input_video.width
-            output_video.height = input_video.height
-            output_video.pix_fmt = "yuv420p"
-            output_video.options = {"crf": "23", "preset": "fast"}
-        else:
-            logger.warning(f"No video stream found in {input_path}")
-            input_container.close()
-            output_container.close()
+        if not shutil.which("ffmpeg"):
+            logger.error("ffmpeg not found in PATH")
             return False
 
-        # Copy audio stream
-        output_audio = None
-        if input_container.streams.audio:
-            input_audio = input_container.streams.audio[0]
-            # Copy audio stream using the same codec as input
-            output_audio = output_container.add_stream(
-                input_audio.codec_context.name, rate=input_audio.sample_rate
-            )
+        cmd = [
+            "ffmpeg",
+            "-y",
+            "-i",
+            str(input_path),
+            "-c",
+            "copy",
+            str(output_path),
+        ]
 
-        # Process and write all packets
-        for packet in input_container.demux():
-            if packet.stream.type == "video":
-                for frame in packet.decode():
-                    for encoded_packet in output_video.encode(frame):
-                        output_container.mux(encoded_packet)
-            elif packet.stream.type == "audio" and output_audio:
-                for frame in packet.decode():
-                    for encoded_packet in output_audio.encode(frame):
-                        output_container.mux(encoded_packet)
+        proc = subprocess.run(cmd, capture_output=True, text=True)
+        if proc.returncode != 0:
+            logger.error(f"ffmpeg copy failed for {input_path}: {proc.stderr.strip()}")
+            return False
 
-        # Flush remaining packets
-        for packet in output_video.encode():
-            output_container.mux(packet)
-        if output_audio:
-            for packet in output_audio.encode():
-                output_container.mux(packet)
-
-        input_container.close()
-        output_container.close()
         return True
 
     except Exception as e:
         logger.error(f"Error copying video from {input_path} to {output_path}: {e}")
         return False
+
+
+def _get_video_fps(video_path: Path, logger: logging.Logger) -> float | None:
+    """Return FPS (as float) for video using ffprobe, or None if it cannot be determined."""
+    if not shutil.which("ffprobe"):
+        logger.debug("ffprobe not found; cannot determine FPS")
+        return None
+
+    cmd = [
+        "ffprobe",
+        "-v",
+        "error",
+        "-select_streams",
+        "v:0",
+        "-show_entries",
+        "stream=avg_frame_rate",
+        "-of",
+        "default=noprint_wrappers=1:nokey=1",
+        str(video_path),
+    ]
+
+    proc = subprocess.run(cmd, capture_output=True, text=True)
+    if proc.returncode != 0:
+        logger.debug(
+            f"ffprobe failed to probe FPS for {video_path}: {proc.stderr.strip()}"
+        )
+        return None
+
+    out = proc.stdout.strip()
+    if not out:
+        return None
+
+    try:
+        return float(Fraction(out))
+    except Exception:
+        return None
+
+
+def _video_has_audio(video_path: Path) -> bool:
+    if not shutil.which("ffprobe"):
+        return False
+    cmd = [
+        "ffprobe",
+        "-v",
+        "error",
+        "-select_streams",
+        "a",
+        "-show_entries",
+        "stream=index",
+        "-of",
+        "csv=p=0",
+        str(video_path),
+    ]
+    proc = subprocess.run(cmd, capture_output=True, text=True)
+    if proc.returncode != 0:
+        return False
+    return bool(proc.stdout.strip())
 
 
 def split_video_at_frames(
@@ -199,21 +228,19 @@ def split_video_at_frames(
     annotated: bool = False,
 ) -> int:
     """
-    Split a video into segments based on continuous non-null regions.
+    Split a video into segments based on continuous non-null regions using ffmpeg.
 
-    For each segment, reloads the video and extracts only the frames in that range.
-
-    Args:
-        video_path: Path to the input video
-        nonnull_segments: List of (start_frame_num, end_frame_num) tuples for valid regions
-        output_prefix: Prefix for output files
-        annotated: If True, uses {stem}_seg{N}_annotated.mp4 naming, else {stem}_seg{N}.mp4
+    If FPS is available via ffprobe, performs frame-accurate trimming using -ss (after -i) and -t.
+    If FPS cannot be determined, falls back to using the frame-selection filter (select='between(n,...)')
+    which is exact in frames but will drop audio.
 
     Returns the number of segments saved.
     """
     segments_saved = 0
 
-    # Process each segment independently
+    fps = _get_video_fps(video_path, logger)
+    has_audio = _video_has_audio(video_path)
+
     for segment_num, (start_frame, end_frame) in enumerate(nonnull_segments, 1):
         frame_count = end_frame - start_frame + 1
 
@@ -235,192 +262,66 @@ def split_video_at_frames(
             )
 
         try:
-            # Open input container fresh for this segment
-            input_container = av.open(str(video_path))
-            input_video = input_container.streams.video[0]
-            input_audio = (
-                input_container.streams.audio[0]
-                if input_container.streams.audio
-                else None
-            )
-
-            # Create output container
-            output_container = av.open(str(output_path), mode="w")
-            output_video = output_container.add_stream(
-                "libx264", rate=input_video.average_rate
-            )
-            output_video.width = input_video.width
-            output_video.height = input_video.height
-            output_video.pix_fmt = "yuv420p"
-            output_video.options = {"crf": "23", "preset": "fast"}
-
-            output_audio = None
-            if input_audio:
-                output_audio = output_container.add_stream(
-                    input_audio.codec_context.name, rate=input_audio.sample_rate
-                )
-                # Ensure audio time base is set so we can compute pts offsets
-                if output_audio.time_base is None:
-                    output_audio.time_base = input_audio.time_base
-                if output_audio.time_base is None:
-                    output_audio.time_base = Fraction(1, int(input_audio.sample_rate))
-
-            # Compute fps and segment times
-            fps = None
-            if input_video.average_rate is not None:
-                try:
-                    fps = float(input_video.average_rate)
-                except Exception:
-                    fps = None
-            elif getattr(input_video, "base_rate", None) is not None:
-                try:
-                    fps = float(input_video.base_rate)
-                except Exception:
-                    fps = None
-
-            if output_video.time_base is None and fps:
-                output_video.time_base = Fraction(1, int(round(fps)))
-            if output_video.time_base is None:
-                output_video.time_base = input_video.time_base
-
             if fps:
                 start_time = start_frame / fps
-                end_time = (end_frame + 1) / fps
+                duration = frame_count / fps
+
+                # Use -ss after -i for frame-accurate seeking
+                cmd = [
+                    "ffmpeg",
+                    "-y",
+                    "-i",
+                    str(video_path),
+                    "-ss",
+                    f"{start_time:.6f}",
+                    "-t",
+                    f"{duration:.6f}",
+                    "-c:v",
+                    "libx264",
+                    "-preset",
+                    "fast",
+                    "-crf",
+                    "23",
+                ]
+
+                if has_audio:
+                    cmd += ["-c:a", "aac", "-b:a", "128k"]
+                else:
+                    cmd += ["-an"]
+
+                cmd += [str(output_path)]
+
             else:
-                start_time = None
-                end_time = None
+                # Fallback: select frames by index (exact in frames) but audio will be dropped
+                vf = f"select='between(n,{start_frame},{end_frame})'"
+                cmd = [
+                    "ffmpeg",
+                    "-y",
+                    "-i",
+                    str(video_path),
+                    "-vf",
+                    vf,
+                    "-vsync",
+                    "0",
+                    "-c:v",
+                    "libx264",
+                    "-preset",
+                    "fast",
+                    "-crf",
+                    "23",
+                    "-an",
+                    str(output_path),
+                ]
 
-            # Iterate packets and write only frames/samples that overlap the segment
-            video_frame_index = 0
-            output_frame_num = 0
-            audio_sample_index = 0
-            frames_written = 0
-            done_video = False
-            done_audio = False
-
-            demux_streams = (
-                (input_video, input_audio) if input_audio else (input_video,)
-            )
-
-            for packet in input_container.demux(demux_streams):
-                if packet.stream.type == "video":
-                    for frame in packet.decode():
-                        # Use decoded order index as a fallback if frame timestamps are missing
-                        frame_index = video_frame_index
-
-                        if frame.pts is not None and frame.time_base is not None:
-                            try:
-                                frame_time = float(frame.pts * frame.time_base)
-                            except Exception:
-                                frame_time = frame_index / fps if fps else None
-                        else:
-                            frame_time = frame_index / fps if fps else None
-
-                        # Skip frames before segment
-                        if frame_time is not None and start_time is not None:
-                            if frame_time < start_time:
-                                video_frame_index += 1
-                                continue
-                            if frame_time >= end_time:
-                                done_video = True
-                                break
-
-                            rel_pts = int(
-                                round(
-                                    (frame_time - start_time)
-                                    / float(output_video.time_base)
-                                )
-                            )
-                        else:
-                            # Fallback to frame index counts
-                            if frame_index < start_frame:
-                                video_frame_index += 1
-                                continue
-                            if frame_index > end_frame:
-                                done_video = True
-                                break
-                            rel_pts = output_frame_num
-
-                        # Assign proper pts/time_base and encode
-                        frame.pts = max(rel_pts, 0)
-                        frame.time_base = output_video.time_base
-
-                        for encoded_packet in output_video.encode(frame):
-                            output_container.mux(encoded_packet)
-
-                        output_frame_num += 1
-                        frames_written += 1
-                        video_frame_index += 1
-
-                    if done_video and (not output_audio or done_audio):
-                        break
-
-                elif packet.stream.type == "audio" and output_audio:
-                    for frame in packet.decode():
-                        # compute frame start time
-                        if frame.pts is not None and frame.time_base is not None:
-                            try:
-                                frame_start_time = float(frame.pts * frame.time_base)
-                            except Exception:
-                                frame_start_time = (
-                                    audio_sample_index / input_audio.sample_rate
-                                )
-                        else:
-                            frame_start_time = (
-                                audio_sample_index / input_audio.sample_rate
-                            )
-
-                        frame_duration = frame.samples / input_audio.sample_rate
-                        frame_end_time = frame_start_time + frame_duration
-
-                        # Skip if entirely before the segment
-                        if start_time is not None and frame_end_time <= start_time:
-                            audio_sample_index += frame.samples
-                            continue
-
-                        # Stop if we've passed the segment
-                        if end_time is not None and frame_start_time >= end_time:
-                            done_audio = True
-                            break
-
-                        # Compute relative pts for this audio frame
-                        if start_time is not None:
-                            rel_audio_pts = int(
-                                round(
-                                    (max(frame_start_time, start_time) - start_time)
-                                    / float(output_audio.time_base)
-                                )
-                            )
-                        else:
-                            rel_audio_pts = (
-                                frame.pts
-                                if frame.pts is not None
-                                else audio_sample_index
-                            )
-
-                        frame.pts = max(rel_audio_pts, 0)
-                        frame.time_base = output_audio.time_base
-
-                        for encoded_packet in output_audio.encode(frame):
-                            output_container.mux(encoded_packet)
-
-                        audio_sample_index += frame.samples
-
-                    if done_audio and done_video:
-                        break
-
-            # Flush remaining packets
-            for packet in output_video.encode():
-                output_container.mux(packet)
-            if output_audio:
-                for packet in output_audio.encode():
-                    output_container.mux(packet)
-
-            output_container.close()
-            input_container.close()
+            proc = subprocess.run(cmd, capture_output=True, text=True)
+            if proc.returncode != 0:
+                logger.error(
+                    f"ffmpeg failed to create segment {segment_num} for {video_path}: {proc.stderr.strip()}"
+                )
+                continue
 
             logger.info(
-                f"Saved segment {segment_num}: {output_path} ({frames_written} frames)"
+                f"Saved segment {segment_num}: {output_path} ({frame_count} frames)"
             )
             segments_saved += 1
 
@@ -492,6 +393,10 @@ def main():
     logger.info(
         f"Found {len(mp4_files)} .mp4 files and {len(unprocessed_videos)} unprocessed videos"
     )
+
+    unprocessed_videos = unprocessed_videos[
+        :1
+    ]  # Limit for testing; remove or adjust as needed
 
     total_segments = 0
     processed_count = 0
