@@ -26,8 +26,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from src import logging_setup
 
 INPUT_DIR = Path("data/A_raw_videos")
-OUTPUT_DIR = Path("data/B_clipped_videos")
-LOGGING_DIR = Path("data/1_logs")
+OUTPUT_DIR = Path("~/data/bat_jester_model_training/B_clipped_videos").expanduser()
+LOGGING_DIR = Path("~/data/bat_jester_model_training/1_logs").expanduser()
 
 
 def find_all_word_timestamps(
@@ -332,6 +332,9 @@ def process_video(
 def main():
     start_time = time()
 
+    # Parse command-line arguments
+    run_all = "--run-all" in sys.argv
+
     model_name = "small.en"
 
     # MANUAL THRESHOLD: Set minimum probability for detecting "start" and "stop" words
@@ -345,6 +348,7 @@ def main():
     VOLUME_BOOST = 2.0  # Adjust this value as needed
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    LOGGING_DIR.mkdir(parents=True, exist_ok=True)
     processing_logger = logging_setup.get_processing_logger(LOGGING_DIR)
     processing_logger.info("Configuration:")
     processing_logger.info("  Model: %s", model_name)
@@ -353,6 +357,9 @@ def main():
     processing_logger.info("  Input directory: %s", INPUT_DIR)
     processing_logger.info("  Output directory: %s", OUTPUT_DIR)
     processing_logger.info("  Logging directory: %s", LOGGING_DIR)
+    processing_logger.info(
+        "  Run all videos: %s", "Yes" if run_all else "No (unprocessed only)"
+    )
 
     # Load Whisper model
     processing_logger.info("Loading Whisper model...")
@@ -360,15 +367,18 @@ def main():
 
     # Filter out videos that have already been processed
     LOGGING_DIR.mkdir(parents=True, exist_ok=True)
-    unprocessed_videos = logging_setup.get_unprocessed_files(
-        input_dir=INPUT_DIR,
-        input_filetype="mp4",
-        output_dir=LOGGING_DIR,
-        output_filetype="log",
-    )
+    if run_all:
+        unprocessed_videos = sorted(INPUT_DIR.glob("*.mp4"))
+    else:
+        unprocessed_videos = logging_setup.get_unprocessed_files(
+            input_dir=INPUT_DIR,
+            input_filetype="mp4",
+            output_dir=LOGGING_DIR,
+            output_filetype="log",
+        )
 
     if not unprocessed_videos:
-        processing_logger.info("All videos have already been processed")
+        processing_logger.info("No videos found to process")
         return
 
     processing_logger.info("Found %s video(s) to process", len(unprocessed_videos))

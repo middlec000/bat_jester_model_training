@@ -10,9 +10,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from src import logging_setup, video_labeler
 
-INPUT_PATH = Path("data/B_clipped_videos")
-OUTPUT_PATH = Path("data/C_ball_xy_positions")
-LOGGING_DIR = Path("data/2_logs")
+INPUT_PATH = Path("~/data/bat_jester_model_training/B_clipped_videos").expanduser()
+OUTPUT_PATH = Path("~/data/bat_jester_model_training/C_ball_xy_positions").expanduser()
+LOGGING_DIR = Path("~/data/bat_jester_model_training/2_logs").expanduser()
 
 
 def label_xy_positions(
@@ -87,18 +87,30 @@ def label_xy_positions(
         video_logger.info("  - Labels saved to: %s", parquet_output_path)
 
 
-if __name__ == "__main__":
+def main():
     start_time = time()
+
+    # Parse command-line arguments
+    run_all = "--run-all" in sys.argv
 
     # Create output directory if it doesn't exist
     OUTPUT_PATH.mkdir(parents=True, exist_ok=True)
     LOGGING_DIR.mkdir(parents=True, exist_ok=True)
 
     processing_logger = logging_setup.get_processing_logger(LOGGING_DIR)
-
-    unprocessed_videos = logging_setup.get_unprocessed_files(
-        INPUT_PATH, "mp4", OUTPUT_PATH, "parquet"
+    processing_logger.info("Configuration:")
+    processing_logger.info("  Input directory: %s", INPUT_PATH)
+    processing_logger.info("  Output directory: %s", OUTPUT_PATH)
+    processing_logger.info(
+        "  Run all videos: %s", "Yes" if run_all else "No (unprocessed only)"
     )
+
+    if run_all:
+        unprocessed_videos = sorted(INPUT_PATH.glob("*.mp4"))
+    else:
+        unprocessed_videos = logging_setup.get_unprocessed_files(
+            INPUT_PATH, "mp4", OUTPUT_PATH, "parquet"
+        )
 
     if not unprocessed_videos:
         processing_logger.info("No new video files found in %s", INPUT_PATH)
@@ -128,3 +140,7 @@ if __name__ == "__main__":
             "Processing completed in %.2f seconds", end_time - start_time
         )
         processing_logger.info("%s", "=" * 60)
+
+
+if __name__ == "__main__":
+    main()
