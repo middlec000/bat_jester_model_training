@@ -25,6 +25,8 @@
             pkgs.ruff
             pkgs.uv
             pkgs.cacert
+            pkgs.ffmpeg
+            pkgs.nodejs_22
             # C++ standard library (required by numpy)
             pkgs.stdenv.cc.cc.lib
             # OpenCV headless dependencies (no Qt/GUI)
@@ -34,7 +36,7 @@
           ];
           shellHook = ''
             export SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt
-            
+
             # Set LD_LIBRARY_PATH for numpy and OpenCV
             export LD_LIBRARY_PATH=${
               pkgs.lib.makeLibraryPath [
