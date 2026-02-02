@@ -62,6 +62,13 @@
     - Save to `/data/6_logs`
         - Processing logs
 
+## To Do
+- [ ] Update logging
+    One timestamped file per script run
+- [ ] Add argument to optionally run specific file(s)
+- [ ] Move x, y confidence thresholding to step 3
+
+
 # Model Selection
 - [ ] Research models that can somehow predict number of juggles on a large audio sample
 - [ ] Research binary classification models that can predict on windowed (chunked) audio

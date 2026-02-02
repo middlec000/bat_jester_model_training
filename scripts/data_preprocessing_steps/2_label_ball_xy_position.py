@@ -2,7 +2,6 @@ import sys
 import logging
 from pathlib import Path
 from time import time
-import pandas as pd
 import cv2
 
 # Add parent directory to path so we can import bat_logging
@@ -13,6 +12,7 @@ from src import logging_setup, video_labeler
 INPUT_PATH = Path("~/data/bat_jester_model_training/B_clipped_videos").expanduser()
 OUTPUT_PATH = Path("~/data/bat_jester_model_training/C_ball_xy_positions").expanduser()
 LOGGING_DIR = Path("~/data/bat_jester_model_training/2_logs").expanduser()
+CONFIDENCE_THRESHOLD = 0.02
 
 
 def label_xy_positions(
@@ -48,32 +48,14 @@ def label_xy_positions(
 
     # Get total number of frames in the video
     cap = cv2.VideoCapture(str(input_video_file_path))
-    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     cap.release()
 
-    # Create a complete DataFrame with all frames
-    # ball_positions format: [(frame_num, x, y, confidence), ...]
-    all_frames = pd.DataFrame({"Frame": range(total_frames)})
-
-    if labeler.ball_positions:
-        detected_df = pd.DataFrame(
-            labeler.ball_positions, columns=["Frame", "x", "y", "confidence"]
-        )
-        # Merge to get all frames, with nulls where ball wasn't detected
-        df = all_frames.merge(detected_df[["Frame", "x", "y"]], on="Frame", how="left")
-    else:
-        # No detections - all x, y values will be null
-        df = all_frames
-        df["x"] = None
-        df["y"] = None
-
-    # Save as parquet
     parquet_output_path = output_dir / (input_video_file_path.stem + ".parquet")
-    df[["Frame", "x", "y"]].to_parquet(parquet_output_path, index=False)
+    labeler.ball_positions.write_parquet(parquet_output_path)
 
     # Calculate detection statistics
-    detected_count = df[["x", "y"]].notna().all(axis=1).sum()
-    total_count = len(df)
+    detected_count = labeler.ball_positions[["x", "y"]].drop_nulls().height
+    total_count = labeler.ball_positions.height
 
     if video_logger:
         video_logger.info("Summary:")
@@ -112,6 +94,10 @@ def main():
             INPUT_PATH, "mp4", OUTPUT_PATH, "parquet"
         )
 
+    unprocessed_videos = [
+        p for p in unprocessed_videos if p.stem == "PXL_20251124_223952009.TS"
+    ]
+
     if not unprocessed_videos:
         processing_logger.info("No new video files found in %s", INPUT_PATH)
     else:
@@ -126,7 +112,7 @@ def main():
             label_xy_positions(
                 input_video_file_path,
                 OUTPUT_PATH,
-                confidence_threshold=0.001,
+                confidence_threshold=CONFIDENCE_THRESHOLD,
                 video_logger=video_logger,
             )
 
@@ -144,3 +130,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+"""
+uv run python scripts/data_preprocessing_steps/2_label_ball_xy_position.py --run-all
+"""
