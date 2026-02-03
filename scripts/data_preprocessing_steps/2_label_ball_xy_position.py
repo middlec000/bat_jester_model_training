@@ -12,7 +12,7 @@ from src import utils, video_labeler
 INPUT_PATH = Path("~/data/bat_jester_model_training/B_clipped_videos").expanduser()
 OUTPUT_PATH = Path("~/data/bat_jester_model_training/C_ball_xy_positions").expanduser()
 LOGGING_DIR = Path("~/data/bat_jester_model_training/2_logs").expanduser()
-CONFIDENCE_THRESHOLD = 0.02
+CONFIDENCE_THRESHOLD = 0.001  # Very small threshold to capture all possible ball positions - real threshold applied in step 3
 
 
 def label_xy_positions(

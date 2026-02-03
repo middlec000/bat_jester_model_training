@@ -12,11 +12,11 @@ print(f"Running all preprocessing steps (--run-all: {run_all})...\n")
 
 for preprocessing_step_script in [
     # "scripts/data_preprocessing_steps/1_clip_beginning_and_end.py",
-    # "scripts/data_preprocessing_steps/2_label_ball_xy_position.py",
+    "scripts/data_preprocessing_steps/2_label_ball_xy_position.py",
     "scripts/data_preprocessing_steps/3_remove_xy_unlabeled_frames.py",
-    # "scripts/data_preprocessing_steps/4_label_juggle_timestamps.py",
-    # "scripts/data_preprocessing_steps/5_separate_audio_from_video.py",
-    # "scripts/data_preprocessing_steps/6_labeled_audio_plots.py",
+    "scripts/data_preprocessing_steps/4_label_juggle_timestamps.py",
+    "scripts/data_preprocessing_steps/5_separate_audio_from_video.py",
+    "scripts/data_preprocessing_steps/6_labeled_audio_plots.py",
 ]:
     script_start_time = time()
     print(f"Running {preprocessing_step_script}...")

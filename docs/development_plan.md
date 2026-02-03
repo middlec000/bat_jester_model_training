@@ -63,16 +63,7 @@
         - Processing logs
 
 ## To Do
-- [ ] Update logging
-    One timestamped file per script run
-- [ ] Add argument to optionally run specific file(s)
-- [ ] Move x, y confidence thresholding to step 3
-    - Load file
-    - Threshold
-    - Impute
-    - Find nonnull segments
-    - Split parquet
-    - Split videos
+- [ ] 
 
 
 # Model Selection
