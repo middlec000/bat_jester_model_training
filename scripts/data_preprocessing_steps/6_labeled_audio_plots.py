@@ -9,7 +9,7 @@ import numpy as np
 # Add parent directory to path so we can import bat_logging
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from src import logging_setup
+from src import utils
 
 LABELS_DIR = Path("~/data/bat_jester_model_training/E_juggle_labels").expanduser()
 AUDIO_DIR = Path(
@@ -29,7 +29,7 @@ def main():
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     LOGGING_DIR.mkdir(parents=True, exist_ok=True)
-    logger = logging_setup.get_processing_logger(LOGGING_DIR)
+    logger = utils.get_processing_logger(LOGGING_DIR)
 
     input_files = list(AUDIO_DIR.glob("*.wav"))
 
@@ -39,7 +39,7 @@ def main():
             f"Processing all files (--run-all flag set): {len(unprocessed_files)} files"
         )
     else:
-        unprocessed_files = logging_setup.get_unprocessed_files(
+        unprocessed_files = utils.get_unprocessed_files(
             input_dir=AUDIO_DIR,
             input_filetype="wav",
             output_dir=OUTPUT_DIR,

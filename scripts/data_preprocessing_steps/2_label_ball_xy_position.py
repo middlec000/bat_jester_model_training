@@ -7,7 +7,7 @@ import cv2
 # Add parent directory to path so we can import bat_logging
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from src import logging_setup, video_labeler
+from src import utils, video_labeler
 
 INPUT_PATH = Path("~/data/bat_jester_model_training/B_clipped_videos").expanduser()
 OUTPUT_PATH = Path("~/data/bat_jester_model_training/C_ball_xy_positions").expanduser()
@@ -20,15 +20,17 @@ def label_xy_positions(
     output_dir: Path,
     output_annotated: bool = True,
     confidence_threshold: float = 0.001,
-    video_logger: logging.Logger = None,
+    processing_logger: logging.Logger = None,
 ):
     """
     Process a single video and save:
     - Annotated video with ball positions overlaid
     - Parquet file with frame-by-frame ball positions (Frame, x, y)
+
+    Logs are written to `processing_logger` (per-run timestamped logger).
     """
-    if video_logger:
-        video_logger.info("Processing video: %s", input_video_file_path.name)
+    if processing_logger:
+        processing_logger.info("Processing video: %s", input_video_file_path.name)
 
     # Initialize labeler with low confidence threshold for ball detection
     labeler = video_labeler.SoccerJuggleVideoLabeler(
@@ -57,16 +59,18 @@ def label_xy_positions(
     detected_count = labeler.ball_positions[["x", "y"]].drop_nulls().height
     total_count = labeler.ball_positions.height
 
-    if video_logger:
-        video_logger.info("Summary:")
-        video_logger.info("  - Total frames: %s", total_count)
-        video_logger.info("  - Frames with ball detected: %s", detected_count)
-        video_logger.info(
+    if processing_logger:
+        processing_logger.info("Summary for %s:", input_video_file_path.name)
+        processing_logger.info("  - Total frames: %s", total_count)
+        processing_logger.info("  - Frames with ball detected: %s", detected_count)
+        processing_logger.info(
             "  - Detection rate: %.1f%%", detected_count / total_count * 100
         )
         if output_annotated:
-            video_logger.info("  - Annotated video saved to: %s", annotated_output_path)
-        video_logger.info("  - Labels saved to: %s", parquet_output_path)
+            processing_logger.info(
+                "  - Annotated video saved to: %s", annotated_output_path
+            )
+        processing_logger.info("  - Labels saved to: %s", parquet_output_path)
 
 
 def main():
@@ -79,7 +83,7 @@ def main():
     OUTPUT_PATH.mkdir(parents=True, exist_ok=True)
     LOGGING_DIR.mkdir(parents=True, exist_ok=True)
 
-    processing_logger = logging_setup.get_processing_logger(LOGGING_DIR)
+    processing_logger = utils.get_processing_logger(LOGGING_DIR)
     processing_logger.info("Configuration:")
     processing_logger.info("  Input directory: %s", INPUT_PATH)
     processing_logger.info("  Output directory: %s", OUTPUT_PATH)
@@ -90,13 +94,9 @@ def main():
     if run_all:
         unprocessed_videos = sorted(INPUT_PATH.glob("*.mp4"))
     else:
-        unprocessed_videos = logging_setup.get_unprocessed_files(
+        unprocessed_videos = utils.get_unprocessed_files(
             INPUT_PATH, "mp4", OUTPUT_PATH, "parquet"
         )
-
-    unprocessed_videos = [
-        p for p in unprocessed_videos if p.stem == "PXL_20251124_223952009.TS"
-    ]
 
     if not unprocessed_videos:
         processing_logger.info("No new video files found in %s", INPUT_PATH)
@@ -104,19 +104,18 @@ def main():
         processing_logger.info("Found %s video(s) to process", len(unprocessed_videos))
 
         for input_video_file_path in unprocessed_videos:
-            video_logger = logging_setup.get_file_logger(
-                input_video_file_path.name, LOGGING_DIR
-            )
             processing_logger.info("Processing %s", input_video_file_path.name)
 
             label_xy_positions(
                 input_video_file_path,
                 OUTPUT_PATH,
                 confidence_threshold=CONFIDENCE_THRESHOLD,
-                video_logger=video_logger,
+                processing_logger=processing_logger,
             )
 
-            video_logger.info("✓ Successfully processed %s", input_video_file_path.name)
+            processing_logger.info(
+                "✓ Successfully processed %s", input_video_file_path.name
+            )
 
         end_time = time()
 

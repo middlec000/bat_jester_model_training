@@ -15,7 +15,7 @@ import logging
 # Add parent directory to path so we can import bat_logging
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from src import logging_setup
+from src import utils
 
 VIDEO_DIR = Path("~/data/bat_jester_model_training/B_clipped_videos").expanduser()
 BALL_XY_POSITIONS_DIR = Path(
@@ -27,6 +27,35 @@ OUTPUT_DIR = Path(
 LOGGING_DIR = Path("~/data/bat_jester_model_training/3_logs").expanduser()
 
 MIN_FRAMES = 30
+CONFIDENCE_THRESHOLD = 0.02
+
+
+def threshold_xy_on_confidence(
+    xy_labels_df: pl.DataFrame, confidence_threshold: float
+) -> pl.DataFrame:
+    """
+    Set x and y to null if confidence is below the threshold.
+
+    Args:
+        xy_labels_df: DataFrame with Frame, x, y, and confidence columns
+        confidence_threshold: Minimum confidence to keep x and y values
+    Returns:
+        DataFrame with x and y set to null where confidence < threshold
+    """
+    df = xy_labels_df.clone()
+
+    df = df.with_columns(
+        pl.when(pl.col("confidence") < confidence_threshold)
+        .then(None)
+        .otherwise(pl.col("x"))
+        .alias("x"),
+        pl.when(pl.col("confidence") < confidence_threshold)
+        .then(None)
+        .otherwise(pl.col("y"))
+        .alias("y"),
+    )
+
+    return df
 
 
 def impute_nulls_with_gap1(xy_labels_df: pl.DataFrame) -> pl.DataFrame:
@@ -180,10 +209,10 @@ def split_video_at_frames(
     """
     segments_saved = 0
 
-    fps = logging_setup.get_video_fps(video_path)
+    fps = utils.get_video_fps(video_path)
     if fps is None:
         logger.debug(f"ffprobe failed to probe FPS for {video_path}")
-    has_audio = logging_setup.video_has_audio(video_path)
+    has_audio = utils.video_has_audio(video_path)
 
     for segment_num, (start_frame, end_frame) in enumerate(nonnull_segments, 1):
         frame_count = end_frame - start_frame + 1
@@ -319,7 +348,7 @@ def main():
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     LOGGING_DIR.mkdir(parents=True, exist_ok=True)
-    logger = logging_setup.get_processing_logger(LOGGING_DIR)
+    logger = utils.get_processing_logger(LOGGING_DIR)
 
     logger.info(f"Starting video processing from {VIDEO_DIR}")
     logger.info(f"Run all videos: {'Yes' if run_all else 'No (unprocessed only)'}")
@@ -361,6 +390,11 @@ def main():
         try:
             # Load xy labels
             xy_labels_df = pl.read_parquet(parquet_path)
+
+            # Threshold x,y on confidence
+            xy_labels_df = threshold_xy_on_confidence(
+                xy_labels_df, CONFIDENCE_THRESHOLD
+            )
 
             # Impute nulls with gap 1 before finding non-null segments
             xy_labels_df = impute_nulls_with_gap1(xy_labels_df)

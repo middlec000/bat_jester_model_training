@@ -6,7 +6,7 @@ import polars as pl
 # Add parent directory to path so we can import bat_logging
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from src import logging_setup
+from src import utils
 
 INPUT_DIR = Path(
     "~/data/bat_jester_model_training/D_completely_xy_labeled_clips"
@@ -26,7 +26,7 @@ def main():
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     LOGGING_DIR.mkdir(parents=True, exist_ok=True)
-    logger = logging_setup.get_processing_logger(LOGGING_DIR)
+    logger = utils.get_processing_logger(LOGGING_DIR)
 
     input_files = list(INPUT_DIR.glob("*.parquet"))
 
@@ -36,7 +36,7 @@ def main():
             f"Processing all files (--run-all flag set): {len(unprocessed_files)} files"
         )
     else:
-        unprocessed_files = logging_setup.get_unprocessed_files(
+        unprocessed_files = utils.get_unprocessed_files(
             input_dir=INPUT_DIR,
             input_filetype="parquet",
             output_dir=OUTPUT_DIR,
@@ -52,7 +52,7 @@ def main():
         start_time = time()
         df = pl.read_parquet(xy_label_file)
 
-        fps = logging_setup.get_video_fps(video_file) or FALLBACK_FRAMES_PER_SECOND
+        fps = utils.get_video_fps(video_file) or FALLBACK_FRAMES_PER_SECOND
 
         # Calculate vertical ball velocity (change in y position)
         df = df.with_columns(

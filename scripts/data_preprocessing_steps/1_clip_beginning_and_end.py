@@ -23,7 +23,7 @@ import sys
 # Add parent directory to path so we can import bat_logging
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from src import logging_setup
+from src import utils
 
 INPUT_DIR = Path("data/A_raw_videos")
 OUTPUT_DIR = Path("~/data/bat_jester_model_training/B_clipped_videos").expanduser()
@@ -156,16 +156,16 @@ def process_video(
         True if video was successfully processed, False otherwise
     """
     video_name = os.path.basename(video_path)
-    video_stem = os.path.splitext(video_name)[0]
-    video_logger = logging_setup.get_file_logger(video_stem, logging_dir)
     processing_logger.info("Processing %s", video_name)
-    video_logger.info("Processing %s", video_name)
 
     temp_file = None
     transcribe_path = video_path
 
     if enable_preprocessing:
-        video_logger.info("Applying audio preprocessing (denoise, normalize, compress)")
+        processing_logger.info(
+            "Applying audio preprocessing for %s (denoise, normalize, compress)",
+            video_name,
+        )
         temp_file = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
         temp_path = temp_file.name
         temp_file.close()
@@ -177,7 +177,9 @@ def process_video(
             denoise=True,
             normalize=True,
         ):
-            video_logger.warning("Audio preprocessing failed; using original video")
+            processing_logger.warning(
+                "Audio preprocessing failed for %s; using original video", video_name
+            )
         else:
             transcribe_path = temp_path
 
@@ -185,24 +187,30 @@ def process_video(
     segments = result["segments"]
 
     # Debug: Show full transcript
-    video_logger.debug("Full transcript: '%s'", result["text"])
-    video_logger.debug("")
+    processing_logger.debug("Full transcript for %s: '%s'", video_name, result["text"])
+    processing_logger.debug("")
 
     # TO DO: Remove this debug block later
     # Debug: Print all transcribed words with timestamps
-    video_logger.debug("All transcribed words:")
+    processing_logger.debug("All transcribed words for %s:", video_name)
     for segment in segments:
         if "words" in segment:
             for word_info in segment["words"]:
                 word = word_info["word"].strip()
                 timestamp = word_info["start"]
                 probability = word_info.get("probability", 1.0)
-                video_logger.debug(
-                    "%0.2fs: '%s' (prob: %.3f)", timestamp, word, probability
+                processing_logger.debug(
+                    "%s %0.2fs: '%s' (prob: %.3f)",
+                    video_name,
+                    timestamp,
+                    word,
+                    probability,
                 )
         else:
-            video_logger.debug("Segment text: %s", segment["text"])
-    video_logger.debug("")
+            processing_logger.debug(
+                "Segment text for %s: %s", video_name, segment["text"]
+            )
+    processing_logger.debug("")
     # End debug block
 
     # Find "start" and "stop" timestamps
@@ -215,8 +223,12 @@ def process_video(
     )
 
     if len(starts) == 0 and len(stops) == 0:
-        video_logger.warning("Could not detect 'start' or 'stop'")
-        video_logger.info("Tip: Speak both words clearly in the video.")
+        processing_logger.warning(
+            "Could not detect 'start' or 'stop' in %s", video_name
+        )
+        processing_logger.info(
+            "Tip for %s: Speak both words clearly in the video.", video_name
+        )
         processing_logger.warning(
             "Skipping %s because words could not be detected", video_name
         )
@@ -228,14 +240,17 @@ def process_video(
         if len(stops) == 2:
             start_time, start_prob = stops[0]
             stop_time, stop_prob = stops[1]
-            video_logger.info(
-                "No explicit 'start' found; treating first 'stop' at %0.2fs as 'start' (prob: %.3f)",
+            processing_logger.info(
+                "No explicit 'start' found; treating first 'stop' at %0.2fs as 'start' (prob: %.3f) for %s",
                 start_time,
                 start_prob,
+                video_name,
             )
-            video_logger.info("Interpreting first 'stop' as 'start' for %s", video_name)
+            processing_logger.info(
+                "Interpreting first 'stop' as 'start' for %s", video_name
+            )
         else:
-            video_logger.warning("Could not detect 'start'")
+            processing_logger.warning("Could not detect 'start' in %s", video_name)
             processing_logger.warning(
                 "Skipping %s because 'start' could not be detected", video_name
             )
@@ -247,16 +262,17 @@ def process_video(
         if len(starts) == 2:
             start_time, start_prob = starts[0]
             stop_time, stop_prob = starts[1]
-            video_logger.info(
-                "No explicit 'stop' found; treating second 'start' at %0.2fs as 'stop' (prob: %.3f)",
+            processing_logger.info(
+                "No explicit 'stop' found; treating second 'start' at %0.2fs as 'stop' (prob: %.3f) for %s",
                 stop_time,
                 stop_prob,
+                video_name,
             )
-            video_logger.info(
+            processing_logger.info(
                 "Interpreting second 'start' as 'stop' for %s", video_name
             )
         else:
-            video_logger.warning("Could not detect 'stop'")
+            processing_logger.warning("Could not detect 'stop' in %s", video_name)
             processing_logger.warning(
                 "Skipping %s because 'stop' could not be detected", video_name
             )
@@ -266,8 +282,18 @@ def process_video(
         start_time, start_prob = max(starts, key=lambda x: x[1])
         stop_time, stop_prob = max(stops, key=lambda x: x[1])
 
-    video_logger.info("Detected 'start' at %0.2fs (prob: %.3f)", start_time, start_prob)
-    video_logger.info("Detected 'stop' at %0.2fs (prob: %.3f)", stop_time, stop_prob)
+    processing_logger.info(
+        "Detected 'start' at %0.2fs (prob: %.3f) for %s",
+        start_time,
+        start_prob,
+        video_name,
+    )
+    processing_logger.info(
+        "Detected 'stop' at %0.2fs (prob: %.3f) for %s",
+        stop_time,
+        stop_prob,
+        video_name,
+    )
 
     # Calculate trim points using configured buffers
     # Start buffer: seconds after the 'start' word to begin the clip
@@ -278,7 +304,9 @@ def process_video(
     # Ensure trim_start is non-negative
     trim_start = max(0.0, trim_start)
 
-    video_logger.info("Trimming video from %0.2fs to %0.2fs", trim_start, trim_end)
+    processing_logger.info(
+        "Trimming %s from %0.2fs to %0.2fs", video_name, trim_start, trim_end
+    )
 
     # Get video duration to validate trim range
     video = VideoFileClip(str(video_path))
@@ -289,8 +317,9 @@ def process_video(
     trim_end = min(trim_end, video_duration)
 
     if trim_start >= trim_end:
-        video_logger.warning(
-            "Skipping: Invalid trim range (%0.2fs to %0.2fs)",
+        processing_logger.warning(
+            "Skipping %s: Invalid trim range (%0.2fs to %0.2fs)",
+            video_name,
             trim_start,
             trim_end,
         )
@@ -298,7 +327,7 @@ def process_video(
 
     # Use ffmpeg with stream copy for fast clipping (no re-encoding)
     output_path = os.path.join(output_dir, video_name)
-    video_logger.info("Saving to: %s", output_path)
+    processing_logger.info("Saving %s to: %s", video_name, output_path)
 
     duration = trim_end - trim_start
     cmd = [
@@ -320,11 +349,9 @@ def process_video(
     try:
         result = subprocess.run(cmd, capture_output=True, text=True)
         if result.returncode != 0:
-            video_logger.error("Error clipping video: %s", result.stderr)
             processing_logger.error("Error clipping %s: %s", video_name, result.stderr)
             return False
     except Exception as e:
-        video_logger.error("Error running ffmpeg: %s", e)
         processing_logger.error("Error running ffmpeg for %s: %s", video_name, e)
         return False
 
@@ -335,7 +362,7 @@ def process_video(
         except Exception:
             pass
 
-    video_logger.info("✓ Successfully processed %s", video_name)
+    processing_logger.info("✓ Successfully processed %s", video_name)
     processing_logger.info("Completed %s", video_name)
     return True
 
@@ -348,7 +375,7 @@ def main():
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     LOGGING_DIR.mkdir(parents=True, exist_ok=True)
-    processing_logger = logging_setup.get_processing_logger(LOGGING_DIR)
+    processing_logger = utils.get_processing_logger(LOGGING_DIR)
     processing_logger.info("Configuration:")
     processing_logger.info("  Model: %s", MODEL_NAME)
     processing_logger.info("  Min probability threshold: %s", MIN_PROBABILITY)
@@ -371,11 +398,11 @@ def main():
     if run_all:
         unprocessed_videos = sorted(INPUT_DIR.glob("*.mp4"))
     else:
-        unprocessed_videos = logging_setup.get_unprocessed_files(
+        unprocessed_videos = utils.get_unprocessed_files(
             input_dir=INPUT_DIR,
             input_filetype="mp4",
-            output_dir=LOGGING_DIR,
-            output_filetype="log",
+            output_dir=OUTPUT_DIR,
+            output_filetype="mp4",
         )
 
     if not unprocessed_videos:

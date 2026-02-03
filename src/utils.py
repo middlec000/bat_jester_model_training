@@ -3,17 +3,35 @@ from pathlib import Path
 import shutil
 import subprocess
 from fractions import Fraction
+from datetime import datetime
 
 
 LOG_FORMAT = "%(asctime)s %(levelname)s %(message)s"
 LOG_DATEFMT = "%Y-%m-%d %H:%M:%S"
 _VIDEO_LOGGERS: dict[str, logging.Logger] = {}
+_RUN_TS: str | None = None
 
 
-def get_processing_logger(output_dir: Path) -> logging.Logger:
-    logger = logging.getLogger("processing")
+def _ensure_run_ts() -> None:
+    """Ensure a per-process run timestamp is set (used to create per-run log filenames)."""
+    global _RUN_TS
+    if _RUN_TS is None:
+        _RUN_TS = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+
+def get_processing_logger(
+    output_dir: Path, run_name: str = "processing"
+) -> logging.Logger:
+    """Return a logger that writes to a timestamped per-run file in output_dir.
+
+    Example filename: 20260202_150309_processing.log
+    """
+    _ensure_run_ts()
+    logger_name = f"processing.{_RUN_TS}"
+    logger = logging.getLogger(logger_name)
     if not logger.handlers:
-        handler = logging.FileHandler(output_dir / "processing.log", encoding="utf-8")
+        log_path = output_dir / f"{_RUN_TS}_{run_name}.log"
+        handler = logging.FileHandler(log_path, encoding="utf-8")
         handler.setFormatter(logging.Formatter(LOG_FORMAT, datefmt=LOG_DATEFMT))
         logger.addHandler(handler)
     logger.setLevel(logging.INFO)
@@ -21,31 +39,24 @@ def get_processing_logger(output_dir: Path) -> logging.Logger:
     return logger
 
 
-def get_file_logger(file_name: str, output_dir: Path) -> logging.Logger:
-    if file_name not in _VIDEO_LOGGERS:
-        logger = logging.getLogger(f"file.{file_name}")
-        handler = logging.FileHandler(output_dir / f"{file_name}.log", encoding="utf-8")
-        handler.setFormatter(logging.Formatter(LOG_FORMAT, datefmt=LOG_DATEFMT))
-        logger.addHandler(handler)
-        logger.setLevel(logging.DEBUG)
-        logger.propagate = False
-        _VIDEO_LOGGERS[file_name] = logger
-    return _VIDEO_LOGGERS[file_name]
-
-
 def get_unprocessed_files(
     input_dir: Path, input_filetype: str, output_dir: Path, output_filetype: str
 ) -> list[Path]:
+    """Return a list of input files that do not have a corresponding output file.
+
+    To support timestamped run log files (and other output naming conventions), this
+    checks whether *any* file in output_dir contains the input file stem and has the
+    requested extension. This makes it robust to per-run timestamped filenames.
     """
-    Get list of files in input_dir that have not yet been processed,
-    based on the presence of log files in logging_dir.
-    """
-    input_files = {f.stem: f for f in input_dir.glob(f"*.{input_filetype}")}
-    output_files = set(f.stem for f in output_dir.glob(f"*.{output_filetype}"))
-    unprocessed_files = [
-        input_files[stem] for stem in input_files if stem not in output_files
-    ]
-    return unprocessed_files
+    input_files = sorted(input_dir.glob(f"*.{input_filetype}"))
+    unprocessed: list[Path] = []
+    for f in input_files:
+        stem = f.stem
+        # Consider processed if any file in output_dir contains the stem and has the desired extension
+        processed = any(output_dir.glob(f"*{stem}*.{output_filetype}"))
+        if not processed:
+            unprocessed.append(f)
+    return unprocessed
 
 
 def get_video_fps(video_path: Path) -> float | None:
