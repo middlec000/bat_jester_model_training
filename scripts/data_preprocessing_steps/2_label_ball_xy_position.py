@@ -9,8 +9,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from src import utils, video_labeler
 
-INPUT_PATH = Path("~/data/bat_jester_model_training/B_clipped_videos").expanduser()
-OUTPUT_PATH = Path("~/data/bat_jester_model_training/C_ball_xy_positions").expanduser()
+INPUT_DIR = Path("~/data/bat_jester_model_training/B_clipped_videos").expanduser()
+OUTPUT_DIR = Path("~/data/bat_jester_model_training/C_ball_xy_positions").expanduser()
 LOGGING_DIR = Path("~/data/bat_jester_model_training/2_logs").expanduser()
 CONFIDENCE_THRESHOLD = 0.001  # Very small threshold to capture all possible ball positions - real threshold applied in step 3
 
@@ -80,26 +80,26 @@ def main():
     run_all = "--run-all" in sys.argv
 
     # Create output directory if it doesn't exist
-    OUTPUT_PATH.mkdir(parents=True, exist_ok=True)
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     LOGGING_DIR.mkdir(parents=True, exist_ok=True)
 
     processing_logger = utils.get_processing_logger(LOGGING_DIR)
     processing_logger.info("Configuration:")
-    processing_logger.info("  Input directory: %s", INPUT_PATH)
-    processing_logger.info("  Output directory: %s", OUTPUT_PATH)
+    processing_logger.info("  Input directory: %s", INPUT_DIR)
+    processing_logger.info("  Output directory: %s", OUTPUT_DIR)
     processing_logger.info(
         "  Run all videos: %s", "Yes" if run_all else "No (unprocessed only)"
     )
 
     if run_all:
-        unprocessed_videos = sorted(INPUT_PATH.glob("*.mp4"))
+        unprocessed_videos = sorted(INPUT_DIR.glob("*.mp4"))
     else:
         unprocessed_videos = utils.get_unprocessed_files(
-            INPUT_PATH, "mp4", OUTPUT_PATH, "parquet"
+            INPUT_DIR, "mp4", OUTPUT_DIR, "parquet"
         )
 
     if not unprocessed_videos:
-        processing_logger.info("No new video files found in %s", INPUT_PATH)
+        processing_logger.info("No new video files found in %s", INPUT_DIR)
     else:
         processing_logger.info("Found %s video(s) to process", len(unprocessed_videos))
 
@@ -108,7 +108,7 @@ def main():
 
             label_xy_positions(
                 input_video_file_path,
-                OUTPUT_PATH,
+                OUTPUT_DIR,
                 confidence_threshold=CONFIDENCE_THRESHOLD,
                 processing_logger=processing_logger,
             )
