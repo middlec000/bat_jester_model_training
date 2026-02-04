@@ -19,6 +19,7 @@ import tempfile
 import subprocess
 from time import time
 import sys
+import argparse
 
 # Add parent directory to path so we can import bat_logging
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -369,9 +370,23 @@ def process_video(
 
 def main():
     start_time = time()
-
     # Parse command-line arguments
-    run_all = "--run-all" in sys.argv
+    parser = argparse.ArgumentParser(description="Trim videos based on voice commands")
+    parser.add_argument(
+        "--run",
+        nargs="+",
+        default=["new"],
+        help='Run mode: "all" to process all files, "new" to process only unprocessed files (default), or provide one or more substrings to process all files whose names contain any substring',
+    )
+    args = parser.parse_args()
+
+    run_arg = args.run
+    if len(run_arg) == 1 and run_arg[0] in ("all", "new"):
+        run_mode = run_arg[0]
+        substrings = None
+    else:
+        run_mode = "substr"
+        substrings = run_arg
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     LOGGING_DIR.mkdir(parents=True, exist_ok=True)
@@ -385,9 +400,9 @@ def main():
     processing_logger.info("  Input directory: %s", INPUT_DIR)
     processing_logger.info("  Output directory: %s", OUTPUT_DIR)
     processing_logger.info("  Logging directory: %s", LOGGING_DIR)
-    processing_logger.info(
-        "  Run all videos: %s", "Yes" if run_all else "No (unprocessed only)"
-    )
+    processing_logger.info("  Run mode: %s", run_mode)
+    if substrings:
+        processing_logger.info("  Substring filters: %s", substrings)
 
     # Load Whisper model
     processing_logger.info("Loading Whisper model...")
@@ -395,14 +410,26 @@ def main():
 
     # Filter out videos that have already been processed
     LOGGING_DIR.mkdir(parents=True, exist_ok=True)
-    if run_all:
+    if run_mode == "all":
         unprocessed_videos = sorted(INPUT_DIR.glob("*.mp4"))
-    else:
+    elif run_mode == "new":
         unprocessed_videos = utils.get_unprocessed_files(
             input_dir=INPUT_DIR,
             input_filetype="mp4",
             output_dir=OUTPUT_DIR,
             output_filetype="mp4",
+        )
+    else:
+        # substrings provided -> process all matching files in INPUT_DIR
+        candidate_files = sorted(INPUT_DIR.glob("*.mp4"))
+        unprocessed_videos = [
+            f for f in candidate_files if any(s in f.name for s in substrings)
+        ]
+        processing_logger.info(
+            "Filtering with substrings=%s: %d -> %d files",
+            substrings,
+            len(candidate_files),
+            len(unprocessed_videos),
         )
 
     if not unprocessed_videos:
@@ -449,5 +476,8 @@ if __name__ == "__main__":
     main()
 
 """
-uv run python scripts/data_preprocessing_steps/1_clip_beginning_and_end.py --run-all
+# Examples:
+# uv run python scripts/data_preprocessing_steps/1_clip_beginning_and_end.py --run all
+# uv run python scripts/data_preprocessing_steps/1_clip_beginning_and_end.py --run new
+# uv run python scripts/data_preprocessing_steps/1_clip_beginning_and_end.py --run substring1 substring2
 """

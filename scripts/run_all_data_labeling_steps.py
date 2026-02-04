@@ -1,14 +1,21 @@
 from time import time
 import subprocess
-import sys
+import argparse
 
 overall_time_start = time()
 
-# Parse command-line arguments
-run_all = "--run-all" in sys.argv
-run_all_arg = ["--run-all"] if run_all else []
-
-print(f"Running all preprocessing steps (--run-all: {run_all})...\n")
+parser = argparse.ArgumentParser(description="Run all preprocessing steps")
+parser.add_argument(
+    "--run",
+    nargs="+",
+    default=["new"],
+    help='Run mode: "all" to process all files, "new" to process only unprocessed files (default), or provide one or more substrings to process all files whose names contain any substring',
+)
+args = parser.parse_args()
+run_arg = args.run
+# Build args to forward to each preprocessing script
+run_forward = ["--run"] + run_arg
+print(f"Running all preprocessing steps (forwarding --run {run_arg})...\n")
 
 for preprocessing_step_script in [
     "scripts/data_preprocessing_steps/1_clip_beginning_and_end.py",
@@ -21,7 +28,7 @@ for preprocessing_step_script in [
     script_start_time = time()
     print(f"Running {preprocessing_step_script}...")
     result = subprocess.run(
-        ["uv", "run", "python", preprocessing_step_script] + run_all_arg
+        ["uv", "run", "python", preprocessing_step_script] + run_forward
     )
     if result.returncode != 0:
         print(
@@ -39,5 +46,8 @@ print(
 
 
 """
-uv run python scripts/run_all_data_labeling_steps.py --run-all
+Example:
+uv run python scripts/run_all_data_labeling_steps.py --run all
+uv run python scripts/run_all_data_labeling_steps.py --run new
+uv run python scripts/run_all_data_labeling_steps.py --run PXL_20251202_230133137
 """

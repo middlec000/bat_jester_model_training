@@ -5,6 +5,7 @@ import librosa
 import librosa.display
 import matplotlib.pyplot as plt
 import numpy as np
+import argparse
 
 # Add parent directory to path so we can import bat_logging
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -23,9 +24,26 @@ LOGGING_DIR = Path("~/data/bat_jester_model_training/6_logs").expanduser()
 
 def main():
     # Parse command-line arguments
-    run_all = "--run-all" in sys.argv
+    parser = argparse.ArgumentParser(description="Generate labeled audio plots")
+    parser.add_argument(
+        "--run",
+        nargs="+",
+        default=["new"],
+        help='Run mode: "all" to process all files, "new" to process only unprocessed files (default), or provide one or more substrings to process all files whose names contain any substring',
+    )
+    args = parser.parse_args()
 
-    print(f"Generate labeled audio plots (--run-all: {run_all})")
+    run_arg = args.run
+    if len(run_arg) == 1 and run_arg[0] in ("all", "new"):
+        run_mode = run_arg[0]
+        substrings = None
+    else:
+        run_mode = "substr"
+        substrings = run_arg
+
+    print(
+        f"Generate labeled audio plots (run_mode: {run_mode}, substrings: {substrings})"
+    )
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     LOGGING_DIR.mkdir(parents=True, exist_ok=True)
@@ -33,12 +51,12 @@ def main():
 
     input_files = list(AUDIO_DIR.glob("*.wav"))
 
-    if run_all:
+    if run_mode == "all":
         unprocessed_files = input_files
         logger.info(
-            f"Processing all files (--run-all flag set): {len(unprocessed_files)} files"
+            f"Processing all files (--run flag 'all'): {len(unprocessed_files)} files"
         )
-    else:
+    elif run_mode == "new":
         unprocessed_files = utils.get_unprocessed_files(
             input_dir=AUDIO_DIR,
             input_filetype="wav",
@@ -46,6 +64,15 @@ def main():
             output_filetype="png",
         )
         logger.info(f"Processing unprocessed files: {len(unprocessed_files)} files")
+    else:
+        candidate_files = input_files
+        unprocessed_files = [
+            f for f in candidate_files if any(s in f.name for s in substrings)
+        ]
+        logger.info(
+            f"Filtering with substrings=%s: {len(candidate_files)} -> {len(unprocessed_files)} files",
+            substrings,
+        )
 
     for audio_filename in unprocessed_files:
         label_file = LABELS_DIR / (audio_filename.stem + ".txt")

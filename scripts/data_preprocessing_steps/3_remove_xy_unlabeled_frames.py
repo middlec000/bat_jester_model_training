@@ -11,6 +11,7 @@ import sys
 import subprocess
 import shutil
 import logging
+import argparse
 
 # Add parent directory to path so we can import bat_logging
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -27,7 +28,7 @@ OUTPUT_DIR = Path(
 LOGGING_DIR = Path("~/data/bat_jester_model_training/3_logs").expanduser()
 
 MIN_FRAMES = 30
-CONFIDENCE_THRESHOLD = 0.02
+CONFIDENCE_THRESHOLD = 0.03
 
 
 def threshold_xy_on_confidence(
@@ -48,11 +49,11 @@ def threshold_xy_on_confidence(
         pl.when(pl.col("confidence") < confidence_threshold)
         .then(None)
         .otherwise(pl.col("x"))
-        .alias("x"),
+        .alias("x_thresh"),
         pl.when(pl.col("confidence") < confidence_threshold)
         .then(None)
         .otherwise(pl.col("y"))
-        .alias("y"),
+        .alias("y_thresh"),
     )
 
     return df
@@ -72,7 +73,7 @@ def impute_nulls_with_gap1(xy_labels_df: pl.DataFrame) -> pl.DataFrame:
     df = xy_labels_df.clone()
 
     # For each column that might have nulls (x and y)
-    for col in ["x", "y"]:
+    for col in ["x_thresh", "y_thresh"]:
         if col in df.columns:
             # Create previous frame values by shifting Frame up by 1
             prev_df = df.select(
@@ -97,15 +98,11 @@ def impute_nulls_with_gap1(xy_labels_df: pl.DataFrame) -> pl.DataFrame:
                 )
                 .then((pl.col(f"{col}_prev") + pl.col(f"{col}_next")) / 2)
                 .otherwise(pl.col(col))
-                .alias(f"{col}_new")
+                .alias(f"{col}_imputed"),
             )
 
             # Replace original column and drop temporary columns
-            df = (
-                df.drop(col)
-                .rename({f"{col}_new": col})
-                .drop([f"{col}_prev", f"{col}_next"])
-            )
+            df = df.drop([f"{col}_prev", f"{col}_next"])
 
     return df
 
@@ -120,7 +117,10 @@ def find_nonnull_segments(xy_labels_df: pl.DataFrame) -> List[tuple]:
     [(1, 5), (10, 15)].
     """
     # Create a boolean mask for rows where both x and y are non-null
-    valid_mask = xy_labels_df["x"].is_not_null() & xy_labels_df["y"].is_not_null()
+    valid_mask = (
+        xy_labels_df["x_thresh_imputed"].is_not_null()
+        & xy_labels_df["y_thresh_imputed"].is_not_null()
+    )
 
     # Add a helper column to identify segments
     df_with_valid = xy_labels_df.with_columns(valid_mask.alias("is_valid"))
@@ -343,25 +343,53 @@ def split_parquet_at_frames(
 
 
 def main():
-    run_all = "--run-all" in sys.argv
-    print(f"Remove xy unlabeled frames (--run-all: {run_all})")
+    parser = argparse.ArgumentParser(
+        description="Remove frames with unlabeled xy positions"
+    )
+    parser.add_argument(
+        "--run",
+        nargs="+",
+        default=["new"],
+        help='Run mode: "all" to process all files, "new" to process only unprocessed files (default), or provide one or more substrings to process all files whose names contain any substring',
+    )
+    args = parser.parse_args()
+
+    run_arg = args.run
+    if len(run_arg) == 1 and run_arg[0] in ("all", "new"):
+        run_mode = run_arg[0]
+        substrings = None
+    else:
+        run_mode = "substr"
+        substrings = run_arg
+    print(
+        f"Remove xy unlabeled frames (run_mode: {run_mode}, substrings: {substrings})"
+    )
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     LOGGING_DIR.mkdir(parents=True, exist_ok=True)
     logger = utils.get_processing_logger(LOGGING_DIR)
 
     logger.info(f"Starting video processing from {VIDEO_DIR}")
-    logger.info(f"Run all videos: {'Yes' if run_all else 'No (unprocessed only)'}")
+    logger.info("Run mode: %s", run_mode)
+    if substrings:
+        logger.info("Substring filters: %s", substrings)
 
     mp4_files = sorted(VIDEO_DIR.glob("*.mp4"))
 
-    if run_all:
+    if run_mode == "all":
         unprocessed_videos = mp4_files
-    else:
+    elif run_mode == "new":
         processed_stems = [
             file.stem.split("_seg")[0] for file in OUTPUT_DIR.glob("*.parquet")
         ]
         unprocessed_videos = [f for f in mp4_files if f.stem not in processed_stems]
+    else:
+        unprocessed_videos = [
+            f for f in mp4_files if any(s in f.name for s in substrings)
+        ]
+        logger.info(
+            f"Applying substring filter {substrings}: {len(mp4_files)} -> {len(unprocessed_videos)} videos"
+        )
 
     logger.info(
         f"Found {len(mp4_files)} .mp4 files and {len(unprocessed_videos)} unprocessed videos"
@@ -482,5 +510,8 @@ if __name__ == "__main__":
     main()
 
 """
-uv run python scripts/data_preprocessing_steps/3_remove_xy_unlabeled_frames.py --run-all
+# Examples:
+# uv run python scripts/data_preprocessing_steps/3_remove_xy_unlabeled_frames.py --run all
+# uv run python scripts/data_preprocessing_steps/3_remove_xy_unlabeled_frames.py --run new
+# uv run python scripts/data_preprocessing_steps/3_remove_xy_unlabeled_frames.py --run substring1 substring2
 """
