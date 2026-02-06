@@ -23,7 +23,8 @@ for preprocessing_step_script in [
     "scripts/data_preprocessing_steps/3_remove_xy_unlabeled_frames.py",
     "scripts/data_preprocessing_steps/4_label_juggle_timestamps.py",
     "scripts/data_preprocessing_steps/5_separate_audio_from_video.py",
-    "scripts/data_preprocessing_steps/6_labeled_audio_plots.py",
+    "scripts/data_preprocessing_steps/6_sync_labels_to_max_audio.py",
+    "scripts/data_preprocessing_steps/7_labeled_audio_plots.py",
 ]:
     script_start_time = time()
     print(f"Running {preprocessing_step_script}...")

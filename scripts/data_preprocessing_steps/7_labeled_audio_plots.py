@@ -17,9 +17,9 @@ AUDIO_DIR = Path(
     "~/data/bat_jester_model_training/F_audio_extracted_from_videos"
 ).expanduser()
 OUTPUT_DIR = Path(
-    "~/data/bat_jester_model_training/G_audio_plots_with_labels"
+    "~/data/bat_jester_model_training/H_audio_plots_with_labels"
 ).expanduser()
-LOGGING_DIR = Path("~/data/bat_jester_model_training/6_logs").expanduser()
+LOGGING_DIR = Path("~/data/bat_jester_model_training/7_logs").expanduser()
 
 
 def main():
@@ -151,3 +151,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+"""
+uv run python scripts/data_preprocessing_steps/7_labeled_audio_plots.py --run all
+"""
