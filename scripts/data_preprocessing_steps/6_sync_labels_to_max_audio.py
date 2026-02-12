@@ -20,41 +20,20 @@ LOGGING_DIR = Path("~/data/bat_jester_model_training/6_logs").expanduser()
 
 # Search neighborhood specified in seconds (converted to samples at runtime after loading audio)
 # Legacy default matched ~2500 samples at 22050 Hz
-AUDIO_NEIGHBORHOOD_SECONDS = 0.3
-SAMPLE_RATE = None  # Use librosa load default if None
-
-
-def olive_timestamp_to_seconds(timestamp: str, frame_rate: int) -> float:
-    """Convert HH:MM:SS;FF -> seconds.
-
-    Returns np.nan if the timestamp is malformed.
-    """
-    try:
-        hours, minutes, seconds_frames = timestamp.split(":")
-        seconds, frames = seconds_frames.split(";")
-        return (
-            float(hours) * 60 * 60  # Hours
-            + float(minutes) * 60  # Minutes
-            + float(seconds)  # Seconds
-            + float(frames) / frame_rate  # Frames
-        )
-    except (ValueError, IndexError):
-        return np.nan
+AUDIO_NEIGHBORHOOD_SECONDS = 0.1
+SAMPLE_RATE = 48000  # Use librosa load default if None
 
 
 def transform_labels_timestamp_to_vector(
-    labels_raw: list, sample_rate: int, frame_rate: int, data_size: int
+    labels: list, sample_rate: int, frame_rate: int, data_size: int
 ) -> np.ndarray:
     """Create a boolean vector (0/1) of length data_size with 1s at label indices."""
-    labels = np.zeros(data_size, dtype=np.int8)
-    for raw_label in labels_raw:
-        seconds = olive_timestamp_to_seconds(timestamp=raw_label, frame_rate=frame_rate)
-        if np.isnan(seconds):
-            continue
+    labels_vector = np.zeros(data_size, dtype=np.int8)
+    for seconds in labels:
         index = int(seconds * sample_rate)
         if 0 <= index < data_size:
-            labels[index] = 1
-    return labels
+            labels_vector[index] = 1
+    return labels_vector
 
 
 def shift_labels_to_local_max(
@@ -175,14 +154,14 @@ def main():
             if label_file.exists():
                 with open(label_file, "r") as f:
                     timestamps = [
-                        line.strip() for line in f.readlines() if line.strip()
+                        float(line.strip()) for line in f.readlines() if line.strip()
                     ]
             else:
                 timestamps = []
 
             # Build label vector
             labels_vector = transform_labels_timestamp_to_vector(
-                labels_raw=timestamps,
+                labels=timestamps,
                 sample_rate=sr,
                 frame_rate=args.frame_rate,
                 data_size=len(audio_data),
@@ -199,12 +178,12 @@ def main():
                 audio_values=audio_data,
                 original_labels_vector=labels_vector,
                 corrected_labels_vector=labels_shifted,
-                output_file=output_file,
+                output_path=output_file,
             )
 
             elapsed_time = time() - start_time
             logger.info(
-                f"Synced labels for {audio_filename.name} in {elapsed_time:.2f}s and saved to {output_file}"
+                f"Synced labels for {audio_filename.name} with sample rate {sr} in {elapsed_time:.2f}s and saved to {output_file}"
             )
 
         except Exception as e:

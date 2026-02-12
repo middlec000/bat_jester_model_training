@@ -53,17 +53,25 @@
         - `.wav` files
     - Save to `/data/5_logs`
         - Processing logs
-- [x] (Step 6) Check that labels match up with data by plotting audio wave and juggle labels
+- [x] (Step 6) Sync the labels to the loudest sound near the original label
     - Load from `/data/E_juggle_labels`
-        - `.json` with timestamps and length of clip
+        - `.txt` of juggle timestamps (in seconds)
     - Load from `/dev/F_audio_extracted_from_videos/`
         - `.wav` files
-    - Save to `/data/G_audio_plots_with_labels`
+    - Save to `/data/G_synced_audio_labels`
+        - `.parquet` files of audio, original labels, and corrected labels
     - Save to `/data/6_logs`
+        - Processing logs
+- [x] (Step 7) Check that labels match up with data by plotting audio wave and juggle labels
+    - Load from `/data/G_synced_audio_labels`
+        - `.parquet` files of audio, original labels, and corrected labels
+    - Save to `/data/H_audio_plots_with_labels`
+        - `.png` plots of audio, original labels, and corrected labels
+    - Save to `/data/7_logs`
         - Processing logs
 
 ## To Do
-- [ ] 
+- [x] Fix step 6 so that original_labels are preserved - currently they are all 0
 
 
 # Model Selection
