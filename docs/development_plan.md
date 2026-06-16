@@ -69,6 +69,11 @@
         - `.png` plots of audio, original labels, and corrected labels
     - Save to `/data/7_logs`
         - Processing logs
+- [ ] (Step 8) Transform data into array input, binary output
+    - Load from `/data/G_synced_audio_labels`
+        - `.parquet` files of audio, original labels, and corrected labels
+    - Save to `/data/I_binary_outcome_chunks`
+        
 
 ## To Do
 - [x] Fix step 6 so that original_labels are preserved - currently they are all 0
